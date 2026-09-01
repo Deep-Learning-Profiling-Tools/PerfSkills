@@ -1,0 +1,503 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "profileweaver/rewrite-report.schema.json",
+  "title": "Rewrite report",
+  "description": "A child skill's deliverable to the root dispatcher: what was measured, what was changed, whether the change is trustworthy, and what the tool could not see. The root adjudicates against gates[] before showing anything to the user.",
+  "type": "object",
+  "required": [
+    "run_id",
+    "skill",
+    "question",
+    "status",
+    "diagnosis",
+    "gates"
+  ],
+  "properties": {
+    "run_id": {
+      "type": "string"
+    },
+    "skill": {
+      "type": "string",
+      "description": "The pw-* child that produced this."
+    },
+    "tool": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "question": {
+      "type": "string",
+      "description": "The falsifiable claim this run set out to test."
+    },
+    "status": {
+      "enum": [
+        "verified",
+        "proposed",
+        "negative",
+        "blocked"
+      ],
+      "description": "verified: all gates passed. proposed: a change exists but a gate failed. negative: no worthwhile improvement found - a real result. blocked: could not measure; see blockers."
+    },
+    "blockers": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "For status=blocked: what stopped the run and what would unblock it."
+    },
+    "diagnosis": {
+      "type": "object",
+      "required": [
+        "bottleneck_class",
+        "target",
+        "evidence"
+      ],
+      "properties": {
+        "bottleneck_class": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string",
+          "description": "The function/kernel/region the rewrite attacks."
+        },
+        "target_pct_of_wall": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "amdahl_ceiling": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Max whole-program speedup available from this target."
+        },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object"
+          }
+        },
+        "confidence": {
+          "enum": [
+            "high",
+            "medium",
+            "low"
+          ]
+        }
+      }
+    },
+    "prediction": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "Written BEFORE benchmarking. A large miss means the diagnosis was wrong even if the code got faster.",
+      "required": [
+        "expected_speedup",
+        "reasoning"
+      ],
+      "properties": {
+        "expected_speedup": {
+          "type": "number"
+        },
+        "reasoning": {
+          "type": "string",
+          "description": "metric -> cause -> change -> effect."
+        },
+        "outcome": {
+          "enum": [
+            "matched",
+            "under",
+            "over",
+            "not-evaluated"
+          ]
+        },
+        "outcome_note": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "If the prediction missed, what that implies about the diagnosis."
+        }
+      }
+    },
+    "variants": {
+      "type": "array",
+      "description": "Every variant tried, including the ones that lost. Discarded attempts are evidence.",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "change",
+          "outcome"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "change": {
+            "type": "string",
+            "description": "One sentence: the single variable changed."
+          },
+          "patch": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Path under runs/<run_id>/variants/."
+          },
+          "benchmark": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Path to the benchmark record."
+          },
+          "speedup": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "speedup_ci95": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "number"
+            }
+          },
+          "correctness": {
+            "enum": [
+              "passed",
+              "failed",
+              "unverified"
+            ]
+          },
+          "outcome": {
+            "enum": [
+              "winner",
+              "no-effect",
+              "regression",
+              "incorrect",
+              "rejected"
+            ]
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "winner": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Name of the winning variant, or null."
+    },
+    "measurement": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "baseline_median_s": {
+          "type": "number"
+        },
+        "variant_median_s": {
+          "type": "number"
+        },
+        "speedup": {
+          "type": "number"
+        },
+        "speedup_ci95": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        },
+        "reps": {
+          "type": "integer"
+        },
+        "interleaved": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "noise_floor_rel_mad": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "conditions": {
+          "type": [
+            "object",
+            "null"
+          ]
+        }
+      }
+    },
+    "reprofile": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "Proof the speedup came from where the diagnosis said it would.",
+      "properties": {
+        "target_pct_before": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "target_pct_after": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "target_shrank": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "new_bottleneck_class": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "regressions": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          },
+          "description": "Regions that got slower, with magnitude and explanation."
+        },
+        "profile_before": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "profile_after": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "gates": {
+      "type": "object",
+      "description": "The root dispatcher's admission criteria. Every field must be present; unknown is a failure, not an omission.",
+      "required": [
+        "correctness",
+        "significance",
+        "mechanism",
+        "no_collateral",
+        "attribution",
+        "reproducible"
+      ],
+      "properties": {
+        "correctness": {
+          "$ref": "#/definitions/gate"
+        },
+        "significance": {
+          "$ref": "#/definitions/gate"
+        },
+        "mechanism": {
+          "$ref": "#/definitions/gate"
+        },
+        "no_collateral": {
+          "$ref": "#/definitions/gate"
+        },
+        "attribution": {
+          "$ref": "#/definitions/gate"
+        },
+        "reproducible": {
+          "$ref": "#/definitions/gate"
+        }
+      }
+    },
+    "limits": {
+      "type": "object",
+      "required": [
+        "cannot_observe"
+      ],
+      "properties": {
+        "cannot_observe": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "What this tool structurally cannot see, so the root does not over-read the result."
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "would_falsify": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The observation that would overturn this conclusion."
+        }
+      }
+    },
+    "next_lever": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "target": {
+          "type": "string"
+        },
+        "pct_of_wall": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "suggested_child": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "rationale": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "cost_actual": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "What the investigation actually cost - machine time and agent tokens. Feeds back into the registry's cost declarations. Token fields come from shared/scripts/tokens.py; leave any not measured null.",
+      "properties": {
+        "profiled_runs": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "benchmark_runs": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "wall_clock_s": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "observed_overhead_factor": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "agent": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "claude",
+            "codex",
+            null
+          ],
+          "description": "Which agent ran this. Token counts are tokenizer-specific and are not comparable across agents."
+        },
+        "token_count_method": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "e.g. 'anthropic count_tokens (claude-opus-4-20250514)' or 'tiktoken o200k_base'. Record it - a heuristic figure must never be quoted as a measurement."
+        },
+        "token_count_exact": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "description": "False when a len/4 heuristic was used. If false, report the number as an estimate with its +-20% band."
+        },
+        "skill_definition_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "Tokens spent injecting SKILL.md files, counted once per load. Measurable from the repo."
+        },
+        "session_total_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "End-to-end tokens for the whole investigation, human ask to final report. NOT introspectable by the agent - must come from an authoritative source (Claude Code /cost). Null means not measured; never substitute skill_definition_tokens for it."
+        },
+        "session_input_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "session_output_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "session_token_source": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Where session_* came from, e.g. 'claude code /cost'. Required whenever session_total_tokens is non-null."
+        }
+      }
+    }
+  },
+  "definitions": {
+    "gate": {
+      "type": "object",
+      "required": [
+        "passed",
+        "detail"
+      ],
+      "properties": {
+        "passed": {
+          "type": "boolean"
+        },
+        "detail": {
+          "type": "string",
+          "description": "The specific value or check, not a restatement of the gate name."
+        }
+      }
+    }
+  }
+}

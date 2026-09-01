@@ -1,0 +1,91 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "profileweaver/benchmark.schema.json",
+  "title": "Benchmark record",
+  "description": "One timing campaign for one build/variant. Emitted by shared/scripts/bench.py. A speedup claim without a matching record from both sides is not reportable.",
+  "type": "object",
+  "required": ["run_id", "label", "command", "reps", "samples_s", "median_s"],
+  "properties": {
+    "run_id": { "type": "string" },
+    "label": { "type": "string", "description": "baseline, or variant-<name>." },
+    "command": { "type": "string" },
+    "cwd": { "type": ["string", "null"] },
+    "timestamp_utc": { "type": ["string", "null"] },
+    "reps": {
+      "type": "integer",
+      "minimum": 5,
+      "description": "Minimum 5. Fewer does not support a significance claim."
+    },
+    "warmup_discarded": { "type": ["integer", "null"], "description": "Reps run and discarded before measuring." },
+    "interleaved_with": {
+      "type": ["string", "null"],
+      "description": "Label of the record this one was A/B interleaved against. Null means sequential blocks - drift is a confound; say so."
+    },
+    "samples_s": {
+      "type": "array",
+      "minItems": 5,
+      "items": { "type": "number", "minimum": 0 },
+      "description": "Every measured wall time, in order. Never pre-filtered."
+    },
+    "median_s": { "type": "number", "minimum": 0 },
+    "mad_s": { "type": ["number", "null"], "description": "Median absolute deviation - robust spread." },
+    "rel_mad": { "type": ["number", "null"], "description": "mad_s / median_s. Above ~0.05 the machine is noisy." },
+    "min_s": { "type": ["number", "null"] },
+    "max_s": { "type": ["number", "null"] },
+    "mean_s": { "type": ["number", "null"] },
+    "stdev_s": { "type": ["number", "null"] },
+    "ci95_s": {
+      "type": ["array", "null"],
+      "items": { "type": "number" },
+      "description": "[low, high] bootstrap CI on the median."
+    },
+    "speedup": {
+      "type": ["object", "null"],
+      "description": "Present only when a baseline record was supplied.",
+      "required": ["baseline_label", "point", "ci95", "significant"],
+      "properties": {
+        "baseline_label": { "type": "string" },
+        "baseline_median_s": { "type": "number" },
+        "point": { "type": "number", "description": "baseline_median_s / median_s." },
+        "ci95": {
+          "type": "array",
+          "items": { "type": "number" },
+          "description": "[low, high] bootstrap CI on the speedup ratio."
+        },
+        "significant": {
+          "type": "boolean",
+          "description": "True only when the CI excludes 1.0. False means the variant did nothing measurable."
+        }
+      }
+    },
+    "correctness": {
+      "type": ["object", "null"],
+      "required": ["status"],
+      "properties": {
+        "status": { "enum": ["passed", "failed", "unverified"] },
+        "oracle": { "type": ["string", "null"], "description": "The check that was run." },
+        "tolerance": { "type": ["string", "null"], "description": "e.g. bitwise, rel 1e-12, L2 norm < 1e-8." },
+        "detail": { "type": ["string", "null"] }
+      }
+    },
+    "conditions": {
+      "type": "object",
+      "description": "What must match between compared records. A mismatch invalidates the comparison.",
+      "properties": {
+        "hostname": { "type": ["string", "null"] },
+        "exclusive": { "type": ["boolean", "null"] },
+        "build_flags": { "type": ["string", "null"] },
+        "launch_shape": { "type": ["string", "null"], "description": "ranks x threads x gpus x nodes." },
+        "pinning": { "type": ["string", "null"] },
+        "input": { "type": ["string", "null"] },
+        "cpu_governor": { "type": ["string", "null"] },
+        "notes": { "type": ["string", "null"] }
+      }
+    },
+    "failures": {
+      "type": "array",
+      "items": { "type": "object" },
+      "description": "Non-zero exits or oracle failures during the campaign, with rep index."
+    }
+  }
+}

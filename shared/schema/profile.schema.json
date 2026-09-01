@@ -1,0 +1,195 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "profileweaver/profile.schema.json",
+  "title": "Normalized profile",
+  "description": "Tool-independent form of one profiling run. Every child skill emits this so the root dispatcher can compare, diff, and adjudicate results across tools. Fields a tool cannot measure MUST be null - never estimated.",
+  "type": "object",
+  "required": ["run_id", "tool", "workload", "totals", "hotspots", "bottleneck"],
+  "properties": {
+    "run_id": {
+      "type": "string",
+      "description": "YYYYMMDD-HHMMSS-<slug>; matches the runs/ directory name."
+    },
+    "phase": {
+      "enum": ["baseline", "variant", "reprofile"],
+      "description": "Which point in the child's loop produced this profile."
+    },
+    "variant": {
+      "type": ["string", "null"],
+      "description": "Variant name when phase is variant/reprofile; null for baseline."
+    },
+    "tool": {
+      "type": "object",
+      "required": ["name", "version", "mode", "command"],
+      "properties": {
+        "name": { "type": "string" },
+        "version": { "type": "string" },
+        "mode": {
+          "type": "string",
+          "description": "Measurement mechanism, e.g. sampling, counters, instrumentation, trace, replay, simulation."
+        },
+        "command": { "type": "string", "description": "Verbatim command line used to collect." },
+        "sampling_hz": { "type": ["number", "null"] },
+        "events": { "type": "array", "items": { "type": "string" } },
+        "overhead_factor": {
+          "type": ["number", "null"],
+          "description": "Measured profiled_runtime / baseline_runtime for this collection."
+        },
+        "multiplexed": {
+          "type": ["boolean", "null"],
+          "description": "True if more events were requested than PMU slots, so counts are extrapolated."
+        }
+      }
+    },
+    "workload": {
+      "type": "object",
+      "required": ["run_command"],
+      "properties": {
+        "run_command": { "type": "string" },
+        "build_command": { "type": ["string", "null"] },
+        "compiler": { "type": ["string", "null"] },
+        "build_flags": { "type": ["string", "null"] },
+        "input": { "type": ["string", "null"], "description": "Input deck / problem size / seed." },
+        "ranks": { "type": ["integer", "null"] },
+        "threads_per_rank": { "type": ["integer", "null"] },
+        "gpus": { "type": ["integer", "null"] },
+        "nodes": { "type": ["integer", "null"] }
+      }
+    },
+    "machine": {
+      "type": "object",
+      "properties": {
+        "hostname": { "type": ["string", "null"] },
+        "cpu_model": { "type": ["string", "null"] },
+        "cores_physical": { "type": ["integer", "null"] },
+        "gpu_model": { "type": ["string", "null"] },
+        "memory_gb": { "type": ["number", "null"] },
+        "exclusive": {
+          "type": ["boolean", "null"],
+          "description": "False or null means measurements share the node; widen all intervals."
+        },
+        "peak_flops_gflops": { "type": ["number", "null"] },
+        "peak_bandwidth_gbs": {
+          "type": ["number", "null"],
+          "description": "Measured (e.g. STREAM), not vendor headline, when available."
+        }
+      }
+    },
+    "totals": {
+      "type": "object",
+      "required": ["wall_time_s"],
+      "properties": {
+        "wall_time_s": { "type": "number", "minimum": 0 },
+        "cpu_time_s": { "type": ["number", "null"] },
+        "gpu_busy_s": { "type": ["number", "null"] },
+        "mpi_time_s": { "type": ["number", "null"] },
+        "io_time_s": { "type": ["number", "null"] },
+        "attributed_s": {
+          "type": ["number", "null"],
+          "description": "Time successfully attributed to hotspots. Gap vs wall_time_s belongs in warnings."
+        },
+        "instructions": { "type": ["number", "null"] },
+        "cycles": { "type": ["number", "null"] },
+        "ipc": { "type": ["number", "null"] },
+        "flops": { "type": ["number", "null"] },
+        "bytes_dram": { "type": ["number", "null"] },
+        "arithmetic_intensity": {
+          "type": ["number", "null"],
+          "description": "flops / bytes_dram. Null unless both were measured."
+        },
+        "energy_j": { "type": ["number", "null"] }
+      }
+    },
+    "hotspots": {
+      "type": "array",
+      "description": "Ranked by self_time_s, descending. Include enough entries to cover >=80% of attributed time.",
+      "items": {
+        "type": "object",
+        "required": ["rank", "name", "kind", "self_time_s", "pct_of_wall"],
+        "properties": {
+          "rank": { "type": "integer", "minimum": 1 },
+          "name": { "type": "string", "description": "Function, kernel, loop, MPI call, or file." },
+          "kind": {
+            "enum": ["cpu-function", "loop", "gpu-kernel", "memcpy", "mpi", "io", "sync", "runtime", "library", "unknown"]
+          },
+          "file": { "type": ["string", "null"] },
+          "line": { "type": ["integer", "null"] },
+          "module": { "type": ["string", "null"], "description": "Binary or shared object." },
+          "self_time_s": { "type": "number", "minimum": 0 },
+          "total_time_s": {
+            "type": ["number", "null"],
+            "description": "Inclusive of callees. Null if the tool does not do callpath attribution."
+          },
+          "pct_of_wall": { "type": "number", "minimum": 0 },
+          "calls": { "type": ["integer", "null"] },
+          "samples": { "type": ["integer", "null"], "description": "Sample count; low counts mean a noisy share." },
+          "callpath": { "type": ["array", "null"], "items": { "type": "string" } },
+          "metrics": {
+            "type": "object",
+            "description": "Tool-specific metrics, already converted to schema units. Keys are documented in the child's tool-notes.md metric dictionary."
+          },
+          "amdahl_ceiling": {
+            "type": ["number", "null"],
+            "description": "Max whole-program speedup if this hotspot cost went to zero: 1 / (1 - pct_of_wall/100)."
+          }
+        }
+      }
+    },
+    "bottleneck": {
+      "type": "object",
+      "required": ["class", "evidence", "confidence"],
+      "properties": {
+        "class": {
+          "enum": ["hotspot", "compute-bound", "memory-bandwidth", "memory-latency", "cache", "vectorization", "sync", "load-imbalance", "communication", "io", "gpu-occupancy", "gpu-idle", "transfer", "launch-overhead", "allocation", "serial-fraction", "indeterminate"]
+        },
+        "scope": { "type": ["string", "null"], "description": "Where the class applies: function, kernel, rank, or phase." },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "description": "Each entry cites a metric THIS tool measured. No inferred mechanisms.",
+          "items": {
+            "type": "object",
+            "required": ["metric", "value", "supports"],
+            "properties": {
+              "metric": { "type": "string" },
+              "value": { "type": ["number", "string"] },
+              "threshold": { "type": ["number", "string", "null"], "description": "The value that separates classes, and why." },
+              "supports": { "type": "string", "description": "What conclusion this licenses." }
+            }
+          }
+        },
+        "confidence": { "enum": ["high", "medium", "low"] },
+        "alternatives": {
+          "type": "array",
+          "description": "Classes the evidence does not rule out, with what measurement would discriminate.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "class": { "type": "string" },
+              "discriminating_measurement": { "type": "string" },
+              "suggested_child": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "description": "Everything that limits trust: unattributed time, broken unwinds, missing symbols, multiplexing error, shared node, inlining collapse, sampling skid, too few samples.",
+      "items": {
+        "type": "object",
+        "required": ["kind", "detail"],
+        "properties": {
+          "kind": { "type": "string" },
+          "detail": { "type": "string" },
+          "magnitude": { "type": ["number", "string", "null"], "description": "How much of the result this affects." }
+        }
+      }
+    },
+    "raw_artifacts": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Paths under runs/<run_id>/raw/ that this normalization was derived from."
+    }
+  }
+}

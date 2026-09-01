@@ -1,0 +1,8 @@
+# global-optimizer-index.json is fully regenerable from the 9 benchmarks'
+# tracked pgo-ledger.md files (see build_global_index.py) -- ignore it like
+# GPA-Benchmark's own gpa-database/.gitignore ignores pgo-ledger-index.json.
+# sweep-log.jsonl is NOT regenerable (it's an ordered event log, including
+# "exhausted" skips that leave no other trace) -- keep it.
+*
+!.gitignore
+!sweep-log.jsonl

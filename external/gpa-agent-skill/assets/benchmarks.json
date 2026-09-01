@@ -1,0 +1,397 @@
+{
+  "bfs": {
+    "dir": "GPA-Benchmark/rodinia/bfs",
+    "buildCmd": [
+      "make"
+    ],
+    "runCmd": [
+      "./bfs",
+      "../../data/bfs/graph1MW_6.txt"
+    ],
+    "runs": 3,
+    "correctness": {
+      "mode": "output-diff",
+      "outputFile": "result.txt"
+    },
+    "kernels": [
+      "Kernel(",
+      "Kernel2("
+    ],
+    "sourceFiles": [
+      "kernel.cu",
+      "kernel2.cu"
+    ],
+    "localTiming": [
+      {
+        "label": "Kernel+Kernel2 (combined)",
+        "regex": "Total kernel time \\(Kernel\\+Kernel2 combined\\): ([0-9.]+) \\(ms\\)",
+        "unit": "ms"
+      }
+    ]
+  },
+  "huffman": {
+    "dir": "GPA-Benchmark/rodinia/huffman",
+    "buildCmd": [
+      "make"
+    ],
+    "runCmd": [
+      "./pavle",
+      "../../data/huffman/test1024_H2.206587175259.in"
+    ],
+    "runs": 3,
+    "correctness": {
+      "mode": "stdout-marker",
+      "passPattern": "PASS! vectors are matching!",
+      "failPattern": "FAIL! vectors are NOT matching!"
+    },
+    "kernels": [
+      "vlc_encode_kernel_sm64huff"
+    ],
+    "sourceFiles": [
+      "vlc_kernel_sm64huff.cu"
+    ],
+    "localTiming": [
+      {
+        "label": "vlc_encode_kernel_sm64huff",
+        "regex": "GPU Encoding time \\(SM64HUFF\\): ([0-9.]+) \\(ms\\)",
+        "unit": "ms"
+      }
+    ]
+  },
+  "gaussian": {
+    "dir": "GPA-Benchmark/rodinia/gaussian",
+    "buildCmd": [
+      "make"
+    ],
+    "runCmd": [
+      "./gaussian",
+      "-f",
+      "../../data/gaussian/matrix208.txt"
+    ],
+    "runs": 3,
+    "correctness": {
+      "mode": "stdout-diff",
+      "ignorePatterns": [
+        "Time total",
+        "Time for CUDA kernels"
+      ]
+    },
+    "kernels": [
+      "Fan1(",
+      "Fan2("
+    ],
+    "sourceFiles": [
+      "gaussian.cu"
+    ],
+    "localTiming": [
+      {
+        "label": "Fan1+Fan2 (combined)",
+        "regex": "Time for CUDA kernels:\\s*([0-9.]+) sec",
+        "unit": "s"
+      }
+    ]
+  },
+  "hotspot": {
+    "dir": "GPA-Benchmark/rodinia/hotspot",
+    "buildCmd": [
+      "make"
+    ],
+    "runCmd": [
+      "./hotspot",
+      "512",
+      "2",
+      "2",
+      "../../data/hotspot/temp_512",
+      "../../data/hotspot/power_512",
+      "output.out"
+    ],
+    "runs": 3,
+    "correctness": {
+      "mode": "output-diff",
+      "outputFile": "output.out"
+    },
+    "kernels": [
+      "calculate_temp"
+    ],
+    "sourceFiles": [
+      "hotspot.cu"
+    ],
+    "localTiming": [
+      {
+        "label": "calculate_temp",
+        "regex": "Total kernel time \\(calculate_temp\\): ([0-9.]+) \\(ms\\)",
+        "unit": "ms"
+      }
+    ]
+  },
+  "kmeans": {
+    "dir": "GPA-Benchmark/rodinia/kmeans",
+    "buildCmd": [
+      "make"
+    ],
+    "runCmd": [
+      "./kmeans",
+      "-o",
+      "-i",
+      "../../data/kmeans/kdd_cup"
+    ],
+    "runs": 3,
+    "correctness": {
+      "mode": "stdout-diff",
+      "ignorePatterns": [
+        "Total kernel time"
+      ]
+    },
+    "localTiming": [
+      {
+        "label": "kmeansPoint",
+        "regex": "Total kernel time \\(kmeansPoint\\): ([0-9.]+) \\(ms\\)",
+        "unit": "ms"
+      }
+    ],
+    "kernels": [
+      "kmeansPoint"
+    ],
+    "sourceFiles": [
+      "kmeans_cuda_kernel.cu",
+      "kmeans_cuda.cu"
+    ]
+  },
+  "lud": {
+    "dir": "GPA-Benchmark/rodinia/lud",
+    "buildCmd": [
+      "make"
+    ],
+    "runCmd": [
+      "./cuda/lud_cuda",
+      "-s",
+      "256",
+      "-v"
+    ],
+    "runs": 3,
+    "correctness": {
+      "mode": "stdout-diff",
+      "ignorePatterns": [
+        "Time consumed"
+      ]
+    },
+    "kernels": [
+      "lud_diagonal",
+      "lud_perimeter",
+      "lud_internal"
+    ],
+    "sourceFiles": [
+      "cuda/lud_kernel.cu"
+    ],
+    "localTiming": [
+      {
+        "label": "lud_cuda (kernel+memcpy)",
+        "regex": "Time consumed\\(ms\\): ([0-9.]+)",
+        "unit": "ms"
+      }
+    ]
+  },
+  "nw": {
+    "dir": "GPA-Benchmark/rodinia/nw",
+    "buildCmd": [
+      "make"
+    ],
+    "runCmd": [
+      "./needle",
+      "2048",
+      "10"
+    ],
+    "runs": 3,
+    "correctness": {
+      "mode": "output-diff",
+      "outputFile": "result.txt"
+    },
+    "kernels": [
+      "needle_cuda_shared_1",
+      "needle_cuda_shared_2"
+    ],
+    "sourceFiles": [
+      "needle_kernel.cu"
+    ],
+    "localTiming": [
+      {
+        "label": "needle_cuda_shared_1",
+        "regex": "Total kernel time \\(needle_cuda_shared_1\\): ([0-9.]+) \\(ms\\)",
+        "unit": "ms"
+      },
+      {
+        "label": "needle_cuda_shared_2",
+        "regex": "Total kernel time \\(needle_cuda_shared_2\\): ([0-9.]+) \\(ms\\)",
+        "unit": "ms"
+      }
+    ]
+  },
+  "srad": {
+    "dir": "GPA-Benchmark/rodinia/srad/srad_v1",
+    "buildCmd": [
+      "make"
+    ],
+    "runCmd": [
+      "./srad",
+      "100",
+      "0.5",
+      "502",
+      "458"
+    ],
+    "runs": 3,
+    "correctness": {
+      "mode": "output-diff",
+      "outputFile": "image_out.pgm"
+    },
+    "kernels": [
+      "srad",
+      "srad2",
+      "extract",
+      "prepare",
+      "reduce",
+      "compress"
+    ],
+    "sourceFiles": [
+      "srad_kernel.cu"
+    ],
+    "localTiming": [
+      {
+        "label": "extract",
+        "regex": "([0-9.]+) s,\\s*[0-9.]+ % : EXTRACT IMAGE",
+        "unit": "s"
+      },
+      {
+        "label": "srad+srad2+prepare+reduce (combined COMPUTE stage)",
+        "regex": "([0-9.]+) s,\\s*[0-9.]+ % : COMPUTE",
+        "unit": "s"
+      },
+      {
+        "label": "compress",
+        "regex": "([0-9.]+) s,\\s*[0-9.]+ % : COMPRESS IMAGE",
+        "unit": "s"
+      }
+    ]
+  },
+  "b+tree": {
+    "dir": "GPA-Benchmark/rodinia/b+tree",
+    "buildCmd": [
+      "make"
+    ],
+    "runCmd": [
+      "./b+tree.out",
+      "file",
+      "../../data/b+tree/mil.txt",
+      "command",
+      "../../data/b+tree/command.txt"
+    ],
+    "runs": 3,
+    "correctness": {
+      "mode": "output-diff",
+      "outputFile": "output.txt"
+    },
+    "kernels": [
+      "findK",
+      "findRangeK"
+    ],
+    "sourceFiles": [
+      "kernel/kernel_gpu_cuda.cu",
+      "kernel/kernel_gpu_cuda_2.cu"
+    ],
+    "localTiming": [
+      {
+        "label": "findK",
+        "regex": "([0-9.]+) s,\\s*[0-9.]+ % : GPU: KERNEL",
+        "unit": "s",
+        "occurrence": 1
+      },
+      {
+        "label": "findRangeK",
+        "regex": "([0-9.]+) s,\\s*[0-9.]+ % : GPU: KERNEL",
+        "unit": "s",
+        "occurrence": 2
+      }
+    ]
+  },
+  "xsbench": {
+    "dir": "GPA-Benchmark/xsbench",
+    "buildCmd": [
+      "make"
+    ],
+    "runCmd": [
+      "./main",
+      "-s",
+      "small",
+      "-m",
+      "event",
+      "-r",
+      "3"
+    ],
+    "runs": 3,
+    "correctness": {
+      "mode": "stdout-marker",
+      "passPattern": "(Valid)",
+      "failPattern": "INVALID CHECKSUM"
+    },
+    "kernels": [
+      "lookup"
+    ],
+    "sourceFiles": [
+      "Simulation.cu"
+    ],
+    "localTiming": [
+      {
+        "label": "lookup",
+        "regex": "Average kernel execution time: ([0-9.]+) seconds",
+        "unit": "s"
+      }
+    ]
+  },
+  "blackscholes": {
+    "dir": "GPA-Benchmark/blackscholes",
+    "buildCmd": [
+      "make"
+    ],
+    "runCmd": [
+      "./blackscholes"
+    ],
+    "runs": 3,
+    "correctness": {
+      "mode": "stdout-marker",
+      "passPattern": "Test passed",
+      "failPattern": "Test failed!"
+    },
+    "kernels": [
+      "BlackScholesGPU"
+    ],
+    "sourceFiles": [
+      "BlackScholes_kernel.cuh"
+    ],
+    "localTiming": [
+      {
+        "label": "BlackScholesGPU",
+        "regex": "BlackScholesGPU\\(\\) time\\s*:\\s*([0-9.]+) msec",
+        "unit": "ms"
+      }
+    ]
+  },
+  "matmul": {
+    "dir": "test_code",
+    "buildCmd": [
+      "make"
+    ],
+    "runCmd": [
+      "./matmul"
+    ],
+    "runs": 7,
+    "correctness": {
+      "mode": "stdout-diff",
+      "ignorePatterns": []
+    },
+    "kernels": [
+      "matmul"
+    ],
+    "sourceFiles": [
+      "matmul.cu"
+    ]
+  }
+}

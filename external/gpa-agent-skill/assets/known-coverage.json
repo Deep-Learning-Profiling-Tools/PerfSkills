@@ -1,0 +1,47 @@
+{
+  "_meta": {
+    "purpose": "Cited snapshot of what GvProf, DrGPUM, and GPA are publicly known to cover, used by scripts/check_coverage.py to answer 'is this candidate benchmark already covered?' without a live web search per candidate. This is a snapshot, not a live source of truth -- refresh it (and bump lastChecked) if it's more than a few months old before trusting a 'not-found' result.",
+    "lastChecked": "2026-07-17",
+    "howGathered": "GitHub repo contents/.gitmodules inspected directly via `gh api` for each tool's actual public repo -- not inferred from memory or general knowledge."
+  },
+  "gvprof": {
+    "repo": "https://github.com/GVProf/GVProf",
+    "paper": "K. Zhou et al., 'GVPROF: A Value Profiler for GPU-Based Clusters', SC20 -- https://mxz297.github.io/files/SC20.pdf",
+    "benchmarkSuiteRepo": "https://github.com/FindHao/hpctoolkit-gpu-sanitizer-samples",
+    "note": "GVProf's .gitmodules points its 'samples' submodule at this shared repo -- same one DrGPUM uses.",
+    "knownBenchmarks": [
+      "b+tree", "backprop", "barracuda", "bfs", "Castro", "cfd", "darknet", "dct8x8", "dwt2d",
+      "dxtc", "gaussian", "heartwall", "histogram", "hotspot", "hotspot3D", "huffman",
+      "interval_merge", "lammps", "lavaMD", "lud", "matrixMulCUBLAS", "myocyte", "NAMD", "nn",
+      "nw", "op_graph_simple", "op_pattern_simple", "particlefilter", "pathfinder", "pytorch",
+      "qmcpack", "recursiveGaussian", "reduction", "srad_v1", "srad_v2", "streamcluster",
+      "vectorAdd (f16/f32/f64/f128/s8/s16/s32/s64/u8/u16/u32/u64 variants)"
+    ]
+  },
+  "drgpum": {
+    "repo": "https://github.com/Lin-Mao/DrGPUM",
+    "paper": "DrGPUM: Guiding Memory Optimization for GPU-Accelerated Applications, ASPLOS 2023 -- https://dl.acm.org/doi/10.1145/3582016.3582044",
+    "benchmarkSuiteRepo": "https://github.com/FindHao/hpctoolkit-gpu-sanitizer-samples",
+    "note": "DrGPUM's .gitmodules points its 'samples' submodule at the identical shared repo GVProf uses -- for benchmark-coverage purposes, GVProf and DrGPUM should be treated as covering the same suite, not checked as if independent.",
+    "knownBenchmarks": "identical to gvprof.knownBenchmarks -- same submodule"
+  },
+  "gpa": {
+    "repo": "https://github.com/Jokeren/GPA",
+    "papers": [
+      "K. Zhou et al., 'GPA: A GPU Performance Advisor Based on Instruction Sampling', CGO 2021",
+      "K. Zhou et al., 'An Automated Tool for Analysis and Tuning of GPU-accelerated Code in HPC Applications', TPDS 2021"
+    ],
+    "benchmarkSuiteRepo": "https://github.com/Jokeren/GPA-Benchmark",
+    "note": "GPA's own README example (`./bin/bench.sh rodinia/bfs`) and GPA-Benchmark's contents confirm its suite is the rodinia benchmark set (plus per-benchmark '-opt' reference variants), not the GVProf/DrGPUM shared samples repo.",
+    "knownBenchmarks": [
+      "b+tree", "backprop", "bfs", "cfd", "gaussian", "heartwall", "hotspot", "huffman", "kmeans",
+      "lavaMD", "lud", "myocyte", "nw", "particlefilter", "pathfinder", "srad", "streamcluster"
+    ]
+  },
+  "crossToolObservations": [
+    "GvProf and DrGPUM share the exact same benchmark suite submodule (FindHao/hpctoolkit-gpu-sanitizer-samples) -- a candidate 'covered by GvProf but not DrGPUM' (or vice versa) is not possible under this snapshot; treat them as one combined coverage set.",
+    "kmeans is covered by GPA but absent from the GvProf/DrGPUM shared suite.",
+    "dwt2d, hotspot3D, and nn appear in the GvProf/DrGPUM shared suite but are absent from GPA-Benchmark's rodinia set.",
+    "leukocyte, mummergpu, and hybridsort appear in neither list checked here -- candidates worth checking further if they surface in a paper survey, though their absence from these two suites is not proof they're uncovered by every profiling tool that exists, only by these three."
+  ]
+}

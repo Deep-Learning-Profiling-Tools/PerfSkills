@@ -1,0 +1,121 @@
+# NOTE ON DIRECTORY PATTERNS
+# A pattern like `lib/` with no leading slash matches a directory named `lib`
+# at EVERY depth, not just the repository root. The Python-packaging block
+# below was copied from a Python .gitignore template, and its `lib/` rule
+# silently excluded profiler-enhanced/hpctoolkit/lib and
+# profiler-enhanced/hpctoolkit/src/lib -- 382 source files -- from the
+# repository. A fresh clone therefore contained an HPCToolkit tree that could
+# not run ./configure ("cannot find input file: lib/Makefile.in").
+#
+# Every project-layout pattern here is now anchored with a leading slash so it
+# applies to the repository root only. Leave them anchored.
+
+# Environment variables and secrets
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+*secrets*
+*credentials*
+
+# Python (anchored to repo root -- see note above)
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+/build/
+/develop-eggs/
+/dist/
+/downloads/
+/eggs/
+/.eggs/
+/lib/
+/lib64/
+/parts/
+/sdist/
+/var/
+/wheels/
+/pip-wheel-metadata/
+/share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+venv/
+ENV/
+env/
+.venv
+
+# IDE and editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.sublime-project
+*.sublime-workspace
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+
+# Node (if applicable)
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Build artifacts
+*.o
+*.a
+*.so
+*.dylib
+*.lo
+*.la
+
+# Out-of-tree build directories created by ./configure and make.
+# Anchored per-profiler so they cannot match source directories elsewhere.
+/profiler-enhanced/hpctoolkit/build/
+/profiler-enhanced/redshow/build/
+/profiler-enhanced/gvprof/
+/profiler-base/hpctoolkit/build/
+/profiler-base/redshow/build/
+/profiler-base/gvprof/
+
+# Profiler run output
+gvprof-measurements/
+gvprof-database/
+
+# Vendor prebuilt libraries that upstream DrGPUM tracks. These are matched by
+# the *.a rule above and must be re-included, or the GL-based samples cannot
+# link. Re-inclusion works only because no parent directory is excluded.
+!**/samples/common/lib/**
+
+# Large data files (if tracking separately)
+*.tar.gz
+*.zip
+*.tar
+*.tar.bz2
+
+# Cache
+.cache/
+*.cache
+
+# OS specific
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local development
+.devcontainer/
+docker-compose.override.yml
+local_config.py
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
