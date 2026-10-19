@@ -1,0 +1,20 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "profileweaver/profile-diff.schema.json",
+  "title": "ProfileWeaver impact-ranked profile delta",
+  "type": "object",
+  "required": ["protocol", "baseline", "variant", "comparability", "headline", "metric_deltas", "unmatched", "context_selection"],
+  "properties": {
+    "protocol": {"const": "profileweaver.profile-diff/v1"},
+    "baseline": {"type": "string"},
+    "variant": {"type": "string"},
+    "comparability": {"type": "object"},
+    "headline": {"type": "object"},
+    "metric_deltas": {"type": "array"},
+    "top_line_deltas": {"type": "array"},
+    "unmatched": {"type": "object"},
+    "remaining_leverage": {"type": ["object", "null"]},
+    "decision_capsules": {"type": "array"},
+    "context_selection": {"type": "object"}
+  }
+}

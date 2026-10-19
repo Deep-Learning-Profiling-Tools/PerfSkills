@@ -1,189 +1,120 @@
 ---
 name: pw-TOOL
-description: TODO one paragraph — the tool this child owns, the bottleneck classes it resolves, the granularity of its attribution, and its cost. Written so the root dispatcher can route on it. Name the tool and its common aliases explicitly so direct user requests ("profile this with TOOL") also land here.
+description: TODO Name the one profiler, the bottleneck classes it observes, attribution granularity, and when to use it. Include common aliases so direct requests route here.
 ---
 
-# pw-TOOL — TODO tool name
+# pw-TOOL
 
-Expert for **TODO tool**. You own one tool and one loop. You are normally invoked by
-`profile-weaver` with a brief, but you must work from a bare request too — in that case build
-the brief yourself before doing anything (question, workload, oracle, budget).
+Own **TODO tool** and its automated loop. Work from a ProfileWeaver request or create the same
+question/workload/oracle/budget contract from a direct request.
 
-<!--
-FILLING THIS IN
-Replace every TODO. Delete this comment. Keep the seven stages and the two gate sections
-verbatim in spirit — they are the contract the root dispatcher adjudicates against. What
-changes between children is *tool mechanics*, not method.
+## Capability
 
-Copy this directory to .claude/skills/pw-<tool>/ and add a registry row. That one location
-serves both agents: Claude Code reads .claude/skills/, and Codex reads .agents/skills/, which
-is a symlink to it.
+Keep this synchronized with `profile-weaver/references/registry.md` and
+`shared/config/registry.json`.
 
-Stay agent-neutral so this works in both:
-  - `name` and `description` are the only frontmatter both agents require. `allowed-tools:` is
-    honored by Claude Code and ignored by Codex - fine to use, never rely on it.
-  - Write paths relative to the repo root and say commands are run from there.
-  - No agent-specific variables (${CLAUDE_SKILL_DIR} and the like). Spell the path out.
-  - Invoke helpers explicitly: `python3 .claude/skills/pw-<tool>/scripts/x.py`.
--->
+- **Answers**: TODO taxonomy tags
+- **Cannot answer**: TODO mechanisms that require another tool
+- **Granularity**: TODO function/line/instruction/kernel/rank/file
+- **Measured cost**: TODO overhead and dominant setup cost
+- **Requires**: TODO tool, hardware, permissions, build flags, artifacts
+- **Escalates to**: TODO child and exact evidence handed over
 
-## Declared capability
+## Automated loop
 
-Keep this in sync with the row in `profile-weaver/references/registry.md`.
+Create `runs/<run-id>/plan.json` per `shared/schema/harness-plan.schema.json`, then execute:
 
-- **Answers**: TODO bottleneck classes from `routing.md`
-- **Cannot answer**: TODO classes to hand back to the router rather than guess at
-- **Granularity**: TODO function / line / instruction / kernel / rank / file
-- **Overhead**: TODO measured factor, and what drives it
-- **Requires**: TODO permissions, build flags, hardware, modules, license
-- **Escalates to**: TODO which child takes over when this one bottoms out
-
-## Stage 1 — Preflight
-
-Do not profile until all of these hold. Each failure has a fix or a hand-back; never proceed
-on a broken premise and annotate it later.
-
-1. **Tool present and version pinned.** `TODO --version`. Record it — the normalized output
-   carries it, because tool versions change metric definitions.
-2. **Permissions.** TODO the specific check (e.g. `cat /proc/sys/kernel/perf_event_paranoid`,
-   GPU counter access flag, container capability). If unavailable and unfixable, hand back to
-   the router with the reason; do not silently downgrade to a weaker measurement.
-3. **Build is profilable.** TODO required flags (`-g`, `-fno-omit-frame-pointer`, `-lineinfo`).
-   If a rebuild is needed, do it and confirm it did not change the workload semantics.
-4. **Baseline with variance.** Time the unmodified workload ≥5 reps:
-   `python3 shared/scripts/bench.py --label baseline --reps 5 -- <run cmd>`
-   Record median and relative MAD. **If the noise floor exceeds the effect you are chasing,
-   stop.** Report the noise problem — a rewrite cannot be validated on this machine until it
-   is fixed (pinning, exclusive allocation, fixed clocks, more reps).
-5. **Oracle is executable.** Run the correctness check against the baseline output and confirm
-   it passes on an unmodified build. An oracle you never saw pass proves nothing later.
-
-Write all of this to `runs/<run-id>/preflight.json`.
-
-## Stage 2 — Profile
-
-Run the tool with the smallest scope that answers the question.
-
-```
-TODO exact command, with the flags that matter and why each is there
+```bash
+python3 shared/scripts/harness.py runs/<run-id>/plan.json --learn
 ```
 
-Rules:
+Use separate cacheable stages so parser changes do not repeat collection:
 
-- **Scope down first.** If the brief narrowed to a region/kernel/rank, restrict the tool to it.
-  Whole-program runs of an expensive tool are a routing failure.
-- **Don't tune the sampling rate for prettiness.** State it, and make sure the hot region got
-  enough samples that its share is statistically meaningful (TODO tool-specific rule of thumb).
-- **Profile the same build you benchmarked.** If profiling required different flags, note it —
-  the profile describes that build, not the production one.
-- Keep raw output in `runs/<run-id>/raw/`. Never delete it; the normalization is an
-  interpretation and someone may need to re-derive it.
+1. `preflight`: confirm version, permissions, workload, ROI/scope, oracle, and expected cost.
+2. `baseline-benchmark`: at least five correct unprofiled samples.
+3. `capture-baseline`: the smallest profiler scope that answers the question.
+4. `normalize-baseline`: write and validate `profile.baseline.json`.
+5. `locate-source`: emit bounded source ranges for measured hotspots.
+6. `build-variant`: one source or configuration change.
+7. `benchmark-variant`: paired adaptive A/B with the oracle.
+8. `reprofile-winner`: same profiler settings and scope.
+9. `report`: adjudicate every trust gate.
 
-## Stage 3 — Normalize
+Full stdout/stderr and raw profiler data stay under the run directory. Stage stdout must be a
+compact status object; detailed evidence belongs in declared output files.
 
-Convert raw output to `shared/schema/profile.schema.json` at
-`runs/<run-id>/profile.baseline.json`, then validate:
+## Preflight and capture
 
-```
-python3 shared/scripts/validate.py shared/schema/profile.schema.json runs/<run-id>/profile.baseline.json
-```
+TODO exact `--version`, permission, and capability-discovery commands. Treat installed help as
+authoritative. Inspect the existing build and launcher. Preserve input, ranks, threads,
+affinity, device mapping, flags, libraries, warmups, and environment.
 
-Normalization is where most dishonesty enters. Guard it:
+Run the baseline oracle before profiling. If permissions or required attribution are absent,
+return a blocker or reroute; do not silently substitute weaker evidence.
 
-- **Self vs. total time**: map the tool's terms to the schema's explicitly. Never sum self and
-  total into one column.
-- **Units**: schema is seconds, bytes, and counts. Convert; do not pass through the tool's
-  native units.
-- **Percentages** are of the schema's stated denominator (`totals.wall_time_s`), not of
-  whatever subset the tool displayed.
-- **Unattributed time** goes in `warnings` with its magnitude. Broken unwinds, missing symbols,
-  and `[unknown]` frames are findings, not rounding errors.
-- **Do not invent fields.** If the tool cannot measure something the schema allows, leave it
-  null. A null is information; a plausible guess is contamination.
+TODO minimal capture command and why each non-default option is required. Scope to the prior
+kernel/region/rank when present. Save immutable raw output under `raw/`. Measure actual overhead
+on the workload rather than retaining a routing estimate.
 
-Set `bottleneck.class`, `bottleneck.evidence[]` (each entry citing a metric this tool actually
-measured), and `bottleneck.confidence`. If the evidence does not distinguish between two
-classes, say so and hand back for triangulation rather than picking the likelier one.
+## Normalize and locate
 
-## Stage 4 — Attach optimization
+Write a deterministic reducer under this skill's `scripts/` when the tool output needs parsing.
+It must emit `profile.baseline.json` and a compact status line. Convert units to seconds, bytes,
+and counts; name denominators; distinguish self from inclusive cost; record unattributed data;
+and leave unobserved fields null.
 
-For the top hotspot(s), read the actual source and propose a change whose mechanism matches the
-diagnosed class. The link must be explicit: *this metric* → *this cause* → *this change* →
-*this predicted effect*.
+Validate:
 
-- **Predict before measuring.** Write the expected speedup and its reasoning into the report
-  first. A prediction that misses badly means the diagnosis was wrong even if the code got
-  faster — that is the single most valuable signal in this loop, so do not quietly drop it.
-- **One variable per variant.** Separate algorithmic changes from flag changes from layout
-  changes. Bundled changes measure nothing.
-- **Bound the blast radius.** Prefer local, reviewable changes. Note any change to numerics,
-  API, memory footprint, or portability.
-- **Respect the ceiling.** Compute the Amdahl bound from the profile: a region at 12% of wall
-  time cannot yield 2× overall. State the ceiling next to the prediction; if the ceiling is
-  uninteresting, say so and hand back rather than optimize it anyway.
-
-Keep each variant as a patch in `runs/<run-id>/variants/<name>.patch`.
-
-## Stage 5 — Benchmark
-
-For every variant, in this order:
-
-1. **Correctness first.** Run the oracle. A failing variant is dead — record it and move on;
-   do not report its timing.
-2. **Same conditions as baseline**: same node, same launch shape, same input, same build flags
-   except the change under test. Interleave variant and baseline runs (A/B/A/B) so drift shows
-   up as noise rather than as a result.
-3. **Reps**: ≥5, more if variance is high. Report median, MAD, and a bootstrap CI on the
-   speedup — never a single run, never the minimum.
-
-```
-python3 shared/scripts/bench.py --label variant-NAME --reps 7 --baseline runs/<run-id>/bench.baseline.json -- <run cmd>
+```bash
+python3 shared/scripts/validate.py shared/schema/profile.schema.json \
+  runs/<run-id>/profile.baseline.json
 ```
 
-Output conforms to `shared/schema/benchmark.schema.json`.
+Resolve only profiler-selected source:
 
-**If the speedup CI includes 1.0, the variant did nothing measurable.** Say that. Do not
-promote it on the strength of the point estimate.
+```bash
+python3 shared/scripts/locate_source.py \
+  --profile runs/<run-id>/profile.baseline.json --run-dir runs/<run-id> \
+  --source-root <application-source-root>
+```
 
-## Stage 6 — Reprofile
+Read only the emitted slices. Resolve one named dependency with `--symbol NAME --append` if the
+initial range cannot establish correctness or explain a proposed change. Low-confidence or
+unresolved mapping is a blocker or an escalation signal.
 
-Re-run stage 2 on the winning variant, normalize to `profile.variant.json`, and diff:
+## Change, benchmark, reprofile
 
-- Did the **targeted** hotspot's share actually fall? If wall time improved but the target did
-  not shrink, you do not understand the change — investigate before reporting.
-- Did the bottleneck **class shift** (e.g. memory-bound → latency-bound)? That is the next
-  lever; record it.
-- Did anything **else regress**? A win funded by a hidden loss elsewhere is not a win.
-- Did new time appear as `[unknown]`/unattributed? Then attribution broke; fix it before
-  claiming a mechanism.
+Connect a measured metric to one predicted change. Respect its Amdahl ceiling. Store one change
+per patch and preserve the baseline.
 
-## Stage 7 — Report
+Define one `experiment-plan.json` and use `shared/scripts/experiment.py` for candidate
+preparation, batched screening, confirmation, and finalization. Edit candidate source only. Do
+not generate inline or run-local preparation, plan, polling, summary, report, or validation
+programs. Application output belongs under `raw/`.
 
-Emit `runs/<run-id>/report.json` per `shared/schema/rewrite-report.schema.json`, plus a
-human-readable `report.md`. The root dispatcher adjudicates against the gates below, so state
-each one's result explicitly rather than leaving it to be inferred.
+```bash
+python3 shared/scripts/bench.py --label variant-NAME --adaptive \
+  --min-reps 5 --max-reps 15 --min-speedup 1.02 \
+  --baseline-command '<baseline command>' --oracle '<oracle>' \
+  --compact-stdout --out runs/<run-id>/bench.variant-NAME.json -- <variant command>
+```
 
-### Trust gates — all must pass to claim a verified rewrite
+Reject a failed oracle. Reprofile only a statistically meaningful winner using identical tool
+settings. Verify the targeted measured cost moved as predicted and inspect bounded profile
+diffs for collateral regression.
 
-| Gate | Passes when |
-|---|---|
-| Correctness | Oracle passed on the variant, with tolerance stated |
-| Significance | Speedup CI excludes 1.0, reps ≥5, conditions matched |
-| Mechanism | Reprofile shows the targeted hotspot shrinking |
-| No collateral | No unexplained regression elsewhere |
-| Attribution | Every causal claim cites a metric this tool measures |
-| Reproducible | Run command, build, node, tool version, run id all recorded |
+## Report contract
 
-Any gate failing downgrades the result to `proposed` — still worth reporting, but never as a
-verified speedup. Report honestly which gate failed; a well-characterized negative result is a
-real deliverable and prevents the next agent from repeating the work.
+Write `report.json` per `shared/schema/rewrite-report.schema.json`. A rewrite is `verified`
+only when correctness, significance, mechanism, no-collateral, attribution, and reproducibility
+all pass. Otherwise use `proposed`, `negative`, or `blocked` and state the failed gate.
 
-### Say what you cannot see
-
-Close every report with the limits of *this tool*: what it samples, what it cannot observe,
-where its attribution is approximate, and which child skill would answer the leftover question.
+The agent consumes the token-bounded `agent-brief.txt`, then only decision-changing named
+drill-downs. Close with tool limitations and the exact child that can measure the remaining
+question.
 
 ## Tool notes
 
-Deeper mechanics — flag reference, output format quirks, metric definitions, known pitfalls —
-live in `references/tool-notes.md`. Read it before stage 2.
+Put version-sensitive flags, metric definitions, output quirks, and failure recovery in
+`references/tool-notes.md`. Routine runs should not load it; read only the relevant section when
+adding an event, resolving a failure, or changing the reducer.

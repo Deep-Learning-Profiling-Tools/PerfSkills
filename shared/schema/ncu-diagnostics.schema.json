@@ -1,0 +1,101 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "profileweaver/ncu-diagnostics.schema.json",
+  "title": "Bounded Nsight Compute kernel diagnostic capsule",
+  "type": "object",
+  "required": ["protocol", "run_id", "collection", "kernels", "context"],
+  "properties": {
+    "protocol": {"const": "profileweaver.ncu-diagnostics/v1"},
+    "run_id": {"type": "string"},
+    "collection": {
+      "type": "object",
+      "required": ["requested", "resolved", "timing"],
+      "properties": {
+        "requested": {"type": ["object", "null"]},
+        "resolved": {"type": ["object", "null"]},
+        "timing": {
+          "type": ["object", "null"],
+          "properties": {
+            "capture_elapsed_s": {"type": ["number", "null"], "minimum": 0},
+            "export_elapsed_s": {"type": ["number", "null"], "minimum": 0},
+            "total_elapsed_s": {"type": ["number", "null"], "minimum": 0}
+          }
+        },
+        "report": {"type": ["string", "null"]}
+      }
+    },
+    "kernels": {
+      "type": "array",
+      "maxItems": 2,
+      "items": {
+        "type": "object",
+        "required": ["name", "metric_count"],
+        "properties": {
+          "name": {"type": "string"},
+          "duration": {"$ref": "#/definitions/measurement"},
+          "launch": {"type": "object"},
+          "occupancy": {"type": "object"},
+          "scheduler": {"type": "object"},
+          "warp_stalls": {
+            "type": "array",
+            "maxItems": 3,
+            "items": {
+              "type": "object",
+              "required": ["reason", "value", "raw_metric"],
+              "properties": {
+                "reason": {"type": "string"}, "value": {"type": "number"},
+                "unit": {"type": ["string", "null"]}, "raw_metric": {"type": "string"}
+              }
+            }
+          },
+          "throughput": {"type": "object"},
+          "memory": {"type": "object"},
+          "instructions": {"type": "object"},
+          "signals": {"type": "array", "maxItems": 3},
+          "evidence": {
+            "type": "array", "maxItems": 12,
+            "items": {"$ref": "#/definitions/measurement"}
+          },
+          "metric_count": {"type": "integer", "minimum": 0}
+        }
+      }
+    },
+    "drilldowns": {
+      "type": "object",
+      "description": "Named, bounded semantic metric groups loaded one at a time; absent groups had no available metrics.",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["path", "matched", "selected", "omitted"],
+        "properties": {
+          "path": {"type": "string"},
+          "matched": {"type": "integer", "minimum": 0},
+          "selected": {"type": "integer", "minimum": 0},
+          "omitted": {"type": "integer", "minimum": 0}
+        }
+      }
+    },
+    "rules": {
+      "type": "array", "maxItems": 5,
+      "description": "Bounded Nsight Compute rule findings; estimated speedup remains a profiler estimate, not a measured result."
+    },
+    "source_hotspots": {
+      "type": "array", "maxItems": 5,
+      "description": "Highest not-issued/sample SASS rows from the bounded kernel, with source counters when available."
+    },
+    "context": {
+      "type": "object",
+      "required": ["max_kernels", "max_stalls_per_kernel", "max_evidence_per_kernel", "omitted_kernels", "raw_metric_rows", "policy"]
+    }
+  },
+  "definitions": {
+    "measurement": {
+      "type": ["object", "null"],
+      "required": ["value", "raw_metric"],
+      "properties": {
+        "value": {"type": "number"},
+        "unit": {"type": ["string", "null"]},
+        "raw_metric": {"type": "string"}
+      }
+    }
+  }
+}

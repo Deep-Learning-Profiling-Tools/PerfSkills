@@ -69,3 +69,41 @@ is harmless.
 | `runs/` | one directory per investigation, `YYYYMMDD-HHMMSS-<slug>` |
 
 Start at `.claude/skills/profile-weaver/SKILL.md`. `README.md` has the full picture.
+
+## Efficient optimization workflow
+
+Optimize from measured evidence with minimal agent context.
+
+1. Record the exact build, command, input, environment, oracle, metric, and baseline fingerprint.
+2. Route to the cheapest capable child listed in
+   `.claude/skills/profile-weaver/references/registry.md`. Never invent measurements or attribute
+   a mechanism the selected profiler cannot observe; unknown values remain `null`. Invoke
+   `shared/scripts/route.py`; do not read the registry, automation reference, or schemas during a
+   routine run.
+3. Consume only compact briefs, per-iteration delta capsules, and their named source slices.
+   Resolve one named dependency at a time; never browse the application, raw traces, full
+   profiles, logs, or large JSON broadly.
+4. Profile every correct candidate once with the routed timing child. Let the controller cache
+   the capture, normalize and diff it, and advance the measured hotspot frontier; confirmation
+   reuses that evidence and the accepted winner receives a fresh final reprofile.
+5. For NVIDIA kernel-internal questions, use `pw-nsight-systems` to name and time one hotspot,
+   then `pw-nsight-compute --section all` for that bounded kernel. Every correct candidate must
+   return an NCU disposition: capture when its kernel-evidence fingerprint changes, otherwise
+   explicit reuse. Consume parent- and baseline-relative deltas from the ≤480-token brief or one
+   named metric group, never the full counter table. Freshly replay the accepted winner.
+6. Work on the largest measured hotspot. Screen up to three orthogonal structural hypotheses per
+   batch and change one variable per candidate. Preserve numerical and communication semantics.
+7. Use `shared/scripts/experiment.py` for candidate preparation, evaluation, confirmation, and
+   finalization. Edit candidate source only. Do not write inline or run-local orchestration,
+   polling, inspection, summary, validation, or reporting programs. Declare `kernel_profile`
+   once; let `init` collect baseline NCU and `evaluate` automatically capture or reuse evidence
+   for every candidate. Use `--ncu ID` only to force a replay. Let confirmation freshly profile
+   the winner. Never create or patch a harness plan for NCU.
+8. For long commands, wait on the existing session at the longest practical interval. Do not
+   combine waits with `tail`, `ps`, JSON readers, or raw-log reads. Prefer non-login `/bin/sh`;
+   establish any required module environment once in cached preflight.
+9. Accept only a correct, significant absolute improvement under the same fingerprint whose
+   reprofile shows the targeted cost fell and collateral cost did not erase the gain. An
+   unresolved gate is `inconclusive`, never a speedup.
+10. Keep detailed application/profiler output under `raw/`. Return one compact verdict and artifact
+   paths. Record cost with `shared/scripts/tokens.py`.

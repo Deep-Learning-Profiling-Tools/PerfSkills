@@ -1,0 +1,19 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "profileweaver/preflight-result.schema.json",
+  "title": "ProfileWeaver cached preflight result",
+  "type": "object",
+  "required": ["protocol", "status", "run_id", "contract_sha256", "tools", "checks"],
+  "properties": {
+    "protocol": {"const": "profileweaver.preflight-result/v1"},
+    "status": {"enum": ["complete", "failed"]},
+    "run_id": {"type": "string"},
+    "contract_sha256": {"type": "string"},
+    "generated_utc": {"type": "string"},
+    "tools": {"type": "array"},
+    "checks": {"type": "array"},
+    "failed_check": {"type": ["string", "null"]},
+    "produced": {"type": "array"},
+    "diagnostic": {"type": "object"}
+  }
+}

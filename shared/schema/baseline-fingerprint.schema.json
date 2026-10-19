@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "profileweaver/baseline-fingerprint.schema.json",
+  "title": "ProfileWeaver baseline contract fingerprint",
+  "type": "object",
+  "required": ["protocol", "generated_utc", "artifacts", "values", "contract_sha256"],
+  "properties": {
+    "protocol": {"const": "profileweaver.baseline-fingerprint/v1"},
+    "generated_utc": {"type": "string"},
+    "artifacts": {"type": "array", "minItems": 1},
+    "values": {"type": "object"},
+    "contract_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}

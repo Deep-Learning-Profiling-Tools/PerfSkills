@@ -1,0 +1,159 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "profileweaver/experiment-plan.schema.json",
+  "title": "ProfileWeaver inherited experiment contract",
+  "type": "object",
+  "required": ["version", "run_id", "run_dir", "source", "execution", "metric", "sampling", "iteration_profile"],
+  "properties": {
+    "version": {"const": 1},
+    "run_id": {"type": "string"},
+    "run_dir": {"type": "string"},
+    "question": {"type": ["string", "null"]},
+    "env": {"type": "object", "additionalProperties": {"type": "string"}},
+    "timeout_s": {"type": ["number", "null"], "minimum": 0},
+    "build_baseline": {"type": "boolean"},
+    "source": {
+      "type": "object",
+      "required": ["baseline_dir", "fingerprint_globs"],
+      "properties": {
+        "baseline_dir": {"type": "string"},
+        "fingerprint_globs": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "copy_ignore": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "execution": {
+      "type": "object",
+      "required": ["command"],
+      "properties": {
+        "build": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "build_cwd": {"type": "string"},
+        "build_timeout_s": {"type": ["number", "null"], "minimum": 0},
+        "command": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "cwd": {"type": "string"},
+        "timeout_s": {"type": ["number", "null"], "minimum": 0},
+        "env": {"type": "object", "additionalProperties": {"type": "string"}}
+      }
+    },
+    "metric": {"$ref": "#/definitions/metric"},
+    "oracle": {"$ref": "#/definitions/oracle"},
+    "sampling": {"$ref": "#/definitions/sampling"},
+    "attribution": {"$ref": "#/definitions/attribution"},
+    "iteration_profile": {
+      "type": "object",
+      "required": ["baseline_profile", "profile_output", "source_targets", "stages"],
+      "properties": {
+        "baseline_profile": {"type": "string"},
+        "profile_output": {"type": "string"},
+        "source_targets": {"type": "string"},
+        "max_delta_items": {"type": "integer", "minimum": 1, "maximum": 3},
+        "env": {"type": "object", "additionalProperties": {"type": "string"}},
+        "stages": {
+          "type": "array", "minItems": 1,
+          "items": {"$ref": "#/definitions/profile_stage"}
+        }
+      }
+    },
+    "kernel_profile": {
+      "type": ["object", "null"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "section": {"type": "string"},
+        "executable": {"type": "string"},
+        "tool_version": {"type": "string"},
+        "baseline_kernel_regex": {"type": "string"},
+        "variant_kernel_regex": {"type": "string"},
+        "exact_kernel": {"type": "boolean"},
+        "launch_count": {"type": "integer", "minimum": 1, "maximum": 8},
+        "timeout_s": {"type": "number", "minimum": 1},
+        "fingerprint_inputs": {
+          "type": "array", "minItems": 1, "items": {"type": "string"}
+        },
+        "final_timeline_profile": {"type": "string"},
+        "env": {"type": "object", "additionalProperties": {"type": "string"}}
+      }
+    },
+    "finalize": {
+      "type": "object",
+      "properties": {
+        "run_finalizer": {"type": "boolean"},
+        "stages": {
+          "type": "array",
+          "items": {
+            "type": "object", "required": ["id", "argv"],
+            "properties": {
+              "id": {"type": "string"},
+              "argv": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+              "cwd": {"type": "string"},
+              "timeout_s": {"type": ["number", "null"], "minimum": 0},
+              "produces": {"type": "array", "items": {"type": "string"}}
+            }
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "profile_stage": {
+      "type": "object", "required": ["id", "argv"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"},
+        "argv": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "cwd": {"type": "string"},
+        "timeout_s": {"type": ["number", "null"], "minimum": 0},
+        "env": {"type": "object", "additionalProperties": {"type": "string"}},
+        "fingerprint_inputs": {"type": "array", "items": {"type": "string"}},
+        "produces": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "metric": {
+      "type": "object",
+      "required": ["source", "direction"],
+      "properties": {
+        "name": {"type": ["string", "null"]},
+        "unit": {"type": ["string", "null"]},
+        "source": {"enum": ["wall", "stdout", "stderr", "file"]},
+        "direction": {"enum": ["lower", "higher"]},
+        "regex": {"type": "string"},
+        "group": {"type": ["integer", "string"]},
+        "scale": {"type": "number"},
+        "path": {"type": "string"}
+      }
+    },
+    "oracle": {
+      "type": ["object", "null"],
+      "properties": {
+        "type": {"enum": ["returncode", "stdout_regex", "stderr_regex", "file_regex", "command"]},
+        "regex": {"type": "string"},
+        "group": {"type": ["integer", "string"]},
+        "expected": {},
+        "path": {"type": "string"},
+        "argv": {"type": "array", "items": {"type": "string"}},
+        "timeout_s": {"type": ["number", "null"], "minimum": 0}
+      }
+    },
+    "sampling": {
+      "type": "object",
+      "required": ["min_pairs", "max_pairs", "final_min_pairs", "final_max_pairs", "practical_threshold"],
+      "properties": {
+        "warmup": {"type": "integer", "minimum": 0},
+        "min_pairs": {"type": "integer", "minimum": 5},
+        "max_pairs": {"type": "integer", "minimum": 5},
+        "final_min_pairs": {"type": "integer", "minimum": 5},
+        "final_max_pairs": {"type": "integer", "minimum": 5},
+        "finalists": {"type": "integer", "minimum": 1},
+        "bootstrap_iterations": {"type": "integer", "minimum": 200},
+        "practical_threshold": {"type": "number", "exclusiveMinimum": 1.0}
+      }
+    },
+    "attribution": {
+      "type": ["object", "null"],
+      "required": ["baseline_target_regex", "variant_target_regex"],
+      "properties": {
+        "baseline_target_regex": {"type": "string"},
+        "variant_target_regex": {"type": "string"},
+        "metric": {"enum": ["self_time_s", "total_time_s", "calls"]},
+        "direction": {"enum": ["lower", "higher"]}
+      }
+    }
+  }
+}

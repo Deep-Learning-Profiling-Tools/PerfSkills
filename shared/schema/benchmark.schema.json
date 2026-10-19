@@ -55,7 +55,12 @@
         "significant": {
           "type": "boolean",
           "description": "True only when the CI excludes 1.0. False means the variant did nothing measurable."
-        }
+        },
+        "practically_significant": {
+          "type": "boolean",
+          "description": "True only when the whole CI clears the declared practical threshold in either direction."
+        },
+        "practical_threshold": {"type": "number", "exclusiveMinimum": 1.0}
       }
     },
     "correctness": {

@@ -19,6 +19,8 @@ Columns:
 | Skill | Tool | Answers | Granularity | Cost | Preconditions |
 |---|---|---|---|---|---|
 | `pw-perf` | Linux `perf` | `hotspot`, `serial-fraction`, `compute-bound`, `memory-bandwidth`, `cache`, `vectorization` (partial) | function, line, instruction | 1.01–1.10× sampling; 1.0–1.2× counters; no rebuild required (`-g` improves attribution) | Linux; `perf` on `PATH`; `perf_event_paranoid <= 2` for user sampling, `<= 0` or `CAP_PERFMON` for most counters; PMU counters usually unavailable in VMs/containers |
+| `pw-nsight-systems` | NVIDIA Nsight Systems (`nsys`) | `gpu-idle`, `transfer`, `launch-overhead`, `sync`, GPU-side `hotspot`; MPI/OpenMP/OpenACC context is partial | host+device event timeline by process/thread/stream/device/rank; kernel and transfer summaries | no rebuild; CUDA/NVTX/OSRT without CPU sampling measured 1.0179× on the recorded XSBench B200 run; retain 1.1–2× only as an unmeasured routing budget on other workloads; CPU sampling, verbose providers, metrics, and long traces cost more | `nsys` on `PATH`; NVIDIA driver + supported GPU for CUDA traces; correct reproducible target; provider-specific libraries/permissions. Full seven-stage loop |
+| `pw-nsight-compute` | NVIDIA Nsight Compute (`ncu`) | `gpu-occupancy`, `compute-bound`, `memory-bandwidth`, `memory-latency`, `cache`, `instruction-stalls`, `register-pressure`, `warp-divergence`, `gpu-roofline` | one timing-ranked GPU kernel; launch, scheduler, warp-state, instruction, cache/memory, throughput, rules, and SASS counters | local NCU 2025.3 full set advertises 7580 metrics; bounded XSBench large run collected 2374 numeric metrics in 28.979 s and exported in 2.869 s. Scope to one launch and cache by fingerprint; never treat this as representative overhead | `ncu` on `PATH`; supported NVIDIA GPU; hardware-counter permission; exact kernel from a timing profile; reproducible input. Full loop when paired with an absolute timing child |
 | `pw-gpa` | GPA (GPU Performance Advisor), via vendored `external/gpa-agent-skill/` (HPCToolkit `hpcrun`→`hpcstruct`→`hpcprof`) | `gpu-occupancy`, `memory-latency`, `sync`, `vectorization` on GPU — instruction-stall attribution via `GINS:LAT_*` codes, with a per-optimizer advice catalog | GPU instruction / source line, per kernel | full rebuild + profiled run per iteration; `nsys` kernel timing on top | NVIDIA GPU + CUDA toolchain; a **built** GPA/HPCToolkit install; `$PW_GPA_ROOT` and `$PW_GPA_TOOLCHAIN` set; benchmark registered in its `assets/benchmarks.json`. `nsys` kernel trace is broken under WSL2 — prefer benchmarks that self-report kernel time |
 | `pw-hpctoolkit` | Stock HPCToolkit (`hpcrun`→`hpcstruct`→`hpcprof`), via vendored `external/hpctoolkit-agent-skill/` | GPU-side `hotspot`, `transfer`, `gpu-idle`, sync cost — GPU op time, kernel activity, H2D/D2H copies, sync counts; instruction-level stalls with `gpu=cuda,pc` | calling context → GPU operation; source line with PC sampling + `--gpucfg yes` | one profiled run; `hpcstruct`/`hpcprof` are the slow steps | `hpcrun`/`hpcstruct`/`hpcprof` on `PATH` from a **CUDA-enabled** build (verify — `hpcrun` existing is not proof); NVIDIA GPU; `hatchet`+`pandas` for `read_profile.py`. **Collect-only** — no fix, no benchmark |
 | `pw-drgpum` | DrGPUM `memory_liveness`, via vendored `external/drgpum-agent-skill/` | `allocation` — objects resident at peak that need not be, never-freed/never-used/oversized allocations, PyTorch caching-allocator segments. **Bytes, never time** | memory object → allocation site (call path or Python frame) | 0× on the workload — reads a pre-captured profile; analysis is seconds | python3; a DrGPUM `memory_liveness` output dir. Capture needs a built DrGPUM (patched copy at `external/drgpum-agent-skill/profiler-enhanced/`) |
@@ -29,14 +31,34 @@ Columns:
 `pw-hpctoolkit` and `pw-gpa` drive the same three binaries. They are not interchangeable:
 
 - **`pw-hpctoolkit` profiles any CUDA executable** with stock HPCToolkit, and only *collects* —
-  it produces a database and reads metrics out of it. Use it as the first rung on a GPU workload,
-  and whenever the target is not a registered benchmark.
+  it produces a database and reads metrics out of it. Use it when calling-context or source
+  attribution is required and whenever that question targets an unregistered benchmark; use
+  `pw-nsight-systems` first for a host/device timeline question.
 - **`pw-gpa` runs the full optimization loop**, but only on a benchmark registered in its
   `benchmarks.json`, and needs a built GPA install with the advisor.
 
 Their event vocabularies differ — a GPA-patched HPCToolkit may expose `gpu=nvidia` where stock
 exposes `gpu=cuda`. A toolchain built for one is not automatically usable by the other; confirm
 with `hpcrun -L` instead of assuming.
+
+`pw-nsight-systems`, `pw-nsight-compute`, `pw-hpctoolkit`, and `pw-gpa` overlap on GPU evidence but answer different
+questions:
+
+- **Use `pw-nsight-systems` by default for host/device timeline questions**: GPU gaps,
+  launch/API delay, transfers, synchronization placement, overlap, and NVTX phases. It needs no
+  rebuild and can profile any supported CUDA executable.
+- **Use `pw-nsight-compute` after the timeline names one expensive kernel** for scheduler/warp
+  stalls, registers, occupancy limiters, cache/memory behavior, throughput, and roofline. A full
+  set is high-cost, so cache it and never sweep every kernel or every candidate.
+- **Use `pw-hpctoolkit` when calling context or source attribution is required**, especially
+  when a timeline names the expensive operation but not the responsible caller. It is
+  collect-only in this framework.
+- **Use `pw-gpa` for instruction/source-line stall diagnosis and its optimization loop** on a
+  registered benchmark. Nsight Systems cannot supply occupancy, roofline, cache, register, or
+  instruction-stall evidence.
+
+When `pw-gvprof` supplies a redundancy hypothesis, pair it with `pw-nsight-systems` to rank the
+affected kernels by measured time before editing.
 
 ### Partial children
 
@@ -99,8 +121,6 @@ Copy `_child-template/` and fill it in.
 
 | Skill | Tool | Fills the gap |
 |---|---|---|
-| `pw-nsight-systems` | NVIDIA Nsight Systems (`nsys`) | `gpu-idle`, `transfer`, `launch-overhead` — host+device timeline. Still the gap `pw-gpa` does not cover, and the timing partner `pw-gvprof` requires |
-| `pw-nsight-compute` | NVIDIA Nsight Compute (`ncu`) | `gpu-occupancy`, GPU roofline — per-kernel counters, high overhead, scope to one kernel. Overlaps `pw-gpa`; prefer `pw-gpa` where its advice catalog applies, `ncu` for roofline and occupancy math |
 | `pw-rocprof` | AMD `rocprof` / `rocprofv3` | the same two classes on ROCm hardware |
 | `pw-vtune` | Intel VTune | `memory-latency`, `sync`, microarchitecture top-down on Intel CPUs |
 | `pw-advisor` | Intel Advisor | `vectorization`, roofline with automated loop-level guidance |
