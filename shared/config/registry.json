@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "skills": [
+    {
+      "skill": "pw-perf",
+      "tool": "Linux perf",
+      "answers": ["hotspot", "serial-fraction", "compute-bound", "memory-bandwidth", "cache", "vectorization"],
+      "cost_rank": 1,
+      "availability": {"commands_all": ["perf"]},
+      "full_loop": true
+    },
+    {
+      "skill": "pw-nsight-systems",
+      "tool": "NVIDIA Nsight Systems",
+      "answers": ["gpu-idle", "transfer", "launch-overhead", "sync", "gpu-hotspot", "hotspot"],
+      "cost_rank": 2,
+      "availability": {"commands_all": ["nsys"]},
+      "full_loop": true
+    },
+    {
+      "skill": "pw-nsight-compute",
+      "tool": "NVIDIA Nsight Compute",
+      "answers": ["gpu-occupancy", "compute-bound", "memory-bandwidth", "memory-latency", "cache", "instruction-stalls", "register-pressure", "warp-divergence", "gpu-roofline"],
+      "cost_rank": 4,
+      "availability": {"commands_all": ["ncu"]},
+      "full_loop": true
+    },
+    {
+      "skill": "pw-hpctoolkit",
+      "tool": "HPCToolkit",
+      "answers": ["gpu-hotspot", "transfer", "gpu-idle", "sync", "gpu-source-line", "call-context"],
+      "cost_rank": 3,
+      "availability": {"commands_all": ["hpcrun", "hpcstruct", "hpcprof"]},
+      "full_loop": false
+    },
+    {
+      "skill": "pw-gpa",
+      "tool": "GPU Performance Advisor",
+      "answers": ["gpu-occupancy", "memory-latency", "sync", "vectorization", "gpu-source-line", "instruction-stalls"],
+      "cost_rank": 5,
+      "availability": {"env_all": ["PW_GPA_ROOT", "PW_GPA_TOOLCHAIN"]},
+      "full_loop": true
+    },
+    {
+      "skill": "pw-drgpum",
+      "tool": "DrGPUM memory_liveness",
+      "answers": ["allocation", "gpu-memory-capacity"],
+      "cost_rank": 1,
+      "availability": {"artifact": "drgpum"},
+      "full_loop": true
+    },
+    {
+      "skill": "pw-gvprof",
+      "tool": "GVProf",
+      "answers": ["value-redundancy", "memory-bandwidth", "cache"],
+      "cost_rank": 1,
+      "availability": {"artifact": "gvprof"},
+      "full_loop": false
+    }
+  ]
+}

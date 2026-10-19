@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "profileweaver/agent-brief.schema.json",
+  "title": "ProfileWeaver decision brief",
+  "type": "object",
+  "required": ["protocol", "run_id", "phase", "action", "measurement", "source", "campaign", "frontier", "trust", "artifacts", "context"],
+  "properties": {
+    "protocol": {"const": "profileweaver.agent-brief/v1"},
+    "run_id": {"type": "string"},
+    "phase": {"enum": ["optimize", "iterate", "repair", "final"]},
+    "action": {"type": "string"},
+    "measurement": {"type": "object"},
+    "source": {"type": "object"},
+    "campaign": {"type": "object"},
+    "frontier": {"type": "array"},
+    "trust": {"type": "object"},
+    "artifacts": {"type": "object"},
+    "context": {
+      "type": "object",
+      "required": ["text_tokens", "max_tokens", "token_method", "text_bytes", "omitted"],
+      "properties": {
+        "text_tokens": {"type": "integer", "minimum": 1},
+        "max_tokens": {"type": "integer", "minimum": 1},
+        "token_method": {"type": "string"},
+        "text_bytes": {"type": "integer", "minimum": 1},
+        "omitted": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}

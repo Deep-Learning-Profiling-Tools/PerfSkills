@@ -18,6 +18,10 @@ you need, which determines the tool.
 | `communication` | Time in MPI calls, wait vs. transfer | per-call, per-pair | MPI trace/profiler |
 | `io` | Time in read/write/metadata | per-file, per-syscall | I/O profiler / strace-class |
 | `gpu-occupancy` | Kernels resident but slow | kernel + launch config | GPU kernel profiler |
+| `instruction-stalls` | Warps are active but cannot issue | kernel + warp-state counters | GPU kernel profiler |
+| `register-pressure` | Register footprint limits residency or spills | kernel + launch/compiler counters | GPU kernel profiler + compiler report |
+| `warp-divergence` | Lanes under-participate on control flow | kernel + branch/thread counters | GPU kernel profiler |
+| `gpu-roofline` | Need compute-vs-memory ceiling evidence | kernel + arithmetic/traffic counters | GPU roofline tool |
 | `gpu-idle` | GPU has gaps | host+device timeline | GPU timeline tracer |
 | `transfer` | H2D/D2H dominates | copy events + sizes | GPU timeline tracer |
 | `launch-overhead` | Many tiny kernels/calls | API trace | GPU/API tracer |
@@ -84,6 +88,13 @@ next one a *narrowed scope*.
 3. **Attribute it.** Callpath + line-level attribution on the hot region only.
 4. **Explain it.** Counters/roofline/timeline on the narrowed region: which class of stall.
 5. **Simulate it.** Cache/dependence simulation, kernel replay. Last resort, smallest scope.
+
+For NVIDIA GPU optimization, use a staged form of rungs 4–5: Nsight Systems identifies and
+times the expensive kernel; Nsight Compute replays one launch to explain it. Keep NCU's full
+metrics and report off-context. The agent receives only a bounded diagnostic capsule with raw
+metric provenance and the named source slice. Use timeline profiling for every correct
+candidate; repeat full NCU only when a candidate changes the diagnosed mechanism and for the
+accepted winner's fresh confirmation.
 
 Skip rungs only with a stated reason (e.g. user already has a sampling profile with a run id).
 

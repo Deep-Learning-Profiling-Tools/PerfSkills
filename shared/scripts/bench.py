@@ -96,10 +96,15 @@ def summarize(samples, rng):
     }
 
 
-def campaign(label, cmd, reps, warmup, cwd, env, oracle, peer_cmd=None, peer_label=None):
-    """Run reps of cmd; if peer_cmd is given, interleave peer/cmd on every rep."""
+def campaign(label, cmd, reps, warmup, cwd, env, oracle, peer_cmd=None, peer_label=None,
+             adaptive=False, min_reps=MIN_REPS, min_speedup=1.02):
+    """Run paired samples, optionally stopping once the speedup interval is decisive."""
     samples, peer_samples, failures = [], [], []
     correctness = None
+    stopping = {"mode": "adaptive" if adaptive else "fixed", "reason": "fixed-repetitions",
+                "min_reps": min_reps if adaptive else None, "max_reps": reps,
+                "practical_speedup_threshold": min_speedup if adaptive else None,
+                "interim_ci95": None}
 
     for i in range(warmup):
         run_once(cmd, cwd, env)
@@ -126,11 +131,31 @@ def campaign(label, cmd, reps, warmup, cwd, env, oracle, peer_cmd=None, peer_lab
                 correctness = {"status": "failed", "oracle": oracle,
                                "detail": f"rep {i}: {res['output']}"}
                 failures.append({"rep": i, "label": label, "oracle_failed": True})
-            elif correctness is None:
+            elif correctness is None or correctness.get("status") == "passed":
                 correctness = {"status": "passed", "oracle": oracle,
                                "detail": f"passed on all reps through {i}"}
 
-    return samples, peer_samples, failures, correctness
+        if adaptive and peer_cmd and len(samples) >= min_reps and len(peer_samples) >= min_reps:
+            interim_rng = random.Random(BOOTSTRAP_SEED + len(samples))
+            ci = bootstrap_speedup_ci(peer_samples, samples, interim_rng, iters=2000)
+            stopping["interim_ci95"] = ci
+            if correctness and correctness.get("status") == "failed":
+                stopping["reason"] = "correctness-failed"
+                break
+            if ci and ci[0] >= min_speedup:
+                stopping["reason"] = "decisive-improvement"
+                break
+            if ci and ci[1] <= 1 / min_speedup:
+                stopping["reason"] = "decisive-regression"
+                break
+            if ci and ci[0] >= 1 / min_speedup and ci[1] <= min_speedup:
+                stopping["reason"] = "practical-equivalence"
+                break
+    if adaptive and stopping["reason"] == "fixed-repetitions":
+        stopping["reason"] = "maximum-repetitions"
+    stopping["reps_used"] = len(samples)
+
+    return samples, peer_samples, failures, correctness, stopping
 
 
 def main():
@@ -138,6 +163,13 @@ def main():
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--label", required=True, help="baseline, or variant-<name>")
     p.add_argument("--reps", type=int, default=MIN_REPS)
+    p.add_argument("--adaptive", action="store_true",
+                   help="stop paired A/B once the CI proves improvement, regression, or practical equivalence")
+    p.add_argument("--min-reps", type=int, default=MIN_REPS)
+    p.add_argument("--max-reps", type=int, default=None,
+                   help="adaptive cap (default: --reps)")
+    p.add_argument("--min-speedup", type=float, default=1.02,
+                   help="smallest practically meaningful speedup for adaptive stopping")
     p.add_argument("--warmup", type=int, default=1, help="reps run and discarded first")
     p.add_argument("--cwd", default=None)
     p.add_argument("--run-id", default=None)
@@ -149,23 +181,35 @@ def main():
     p.add_argument("--baseline-label", default="baseline")
     p.add_argument("--out", default=None, help="output JSON path (default: stdout only)")
     p.add_argument("--note", default=None)
+    p.add_argument("--compact-stdout", action="store_true",
+                   help="write the full record to --out and print only a one-line status")
     p.add_argument("cmd", nargs=argparse.REMAINDER, help="-- command to time")
     a = p.parse_args()
 
     cmd = a.cmd[1:] if a.cmd and a.cmd[0] == "--" else a.cmd
     if not cmd:
         p.error("no command given; put it after --")
-    if a.reps < MIN_REPS:
-        print(f"warning: reps={a.reps} is below the schema minimum of {MIN_REPS}; "
+    if a.compact_stdout and not a.out:
+        p.error("--compact-stdout requires --out so the full evidence is preserved")
+    reps = a.max_reps if a.adaptive and a.max_reps is not None else a.reps
+    if a.adaptive and not a.baseline_command:
+        p.error("--adaptive requires --baseline-command for paired decisions")
+    if a.adaptive and (a.min_reps < MIN_REPS or a.min_reps > reps):
+        p.error(f"--min-reps must be between {MIN_REPS} and the repetition cap")
+    if a.min_speedup <= 1:
+        p.error("--min-speedup must exceed 1.0")
+    if reps < MIN_REPS:
+        print(f"warning: reps={reps} is below the schema minimum of {MIN_REPS}; "
               f"this record cannot support a significance claim.", file=sys.stderr)
 
     rng = random.Random(BOOTSTRAP_SEED)
     env = os.environ.copy()
     run_id = a.run_id or datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-bench")
 
-    samples, peer_samples, failures, correctness = campaign(
-        a.label, cmd, a.reps, a.warmup, a.cwd, env, a.oracle,
-        peer_cmd=a.baseline_command, peer_label=a.baseline_label)
+    samples, peer_samples, failures, correctness, stopping = campaign(
+        a.label, cmd, reps, a.warmup, a.cwd, env, a.oracle,
+        peer_cmd=a.baseline_command, peer_label=a.baseline_label,
+        adaptive=a.adaptive, min_reps=a.min_reps, min_speedup=a.min_speedup)
 
     if not samples:
         print("error: no successful runs; nothing to report", file=sys.stderr)
@@ -194,6 +238,7 @@ def main():
             "notes": a.note,
         },
         "failures": failures,
+        "stopping": stopping,
     }
     rec.update(summarize(samples, rng))
 
@@ -219,6 +264,9 @@ def main():
             "ci95": ci,
             # significant only if the whole interval sits on one side of 1.0
             "significant": bool(ci and (ci[0] > 1.0 or ci[1] < 1.0)),
+            "practically_significant": bool(ci and
+                                            (ci[0] >= a.min_speedup or ci[1] <= 1 / a.min_speedup)),
+            "practical_threshold": a.min_speedup,
         }
 
     out = json.dumps(rec, indent=2)
@@ -241,7 +289,14 @@ def main():
             with open(peer_path, "w") as f:
                 f.write(json.dumps(peer_rec, indent=2) + "\n")
 
-    print(out)
+    if a.compact_stdout:
+        sp = rec.get("speedup") or {}
+        print(json.dumps({"status": "ok", "label": a.label, "reps": rec["reps"],
+                          "speedup": sp.get("point"), "ci95": sp.get("ci95"),
+                          "correctness": correctness["status"], "stop": stopping["reason"],
+                          "output": a.out}, separators=(",", ":")))
+    else:
+        print(out)
 
     sp = rec.get("speedup")
     if sp:

@@ -1,0 +1,85 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "profileweaver/agent-view.schema.json",
+  "title": "ProfileWeaver compact agent view",
+  "description": "Bounded decision packet emitted to the agent. Full evidence remains on disk and is opened only through targeted drill-downs.",
+  "type": "object",
+  "required": ["protocol", "run_id", "state", "decision", "evidence", "artifacts", "context"],
+  "properties": {
+    "protocol": {"const": "profileweaver.agent-view/v1"},
+    "run_id": {"type": "string"},
+    "state": {
+      "enum": ["needs-profile", "profile-ready", "candidate-ready", "verified", "proposed", "negative", "blocked"]
+    },
+    "question": {"type": ["string", "null"]},
+    "route": {
+      "type": "object",
+      "properties": {
+        "skill": {"type": ["string", "null"]},
+        "tool": {"type": ["string", "null"]}
+      }
+    },
+    "decision": {
+      "type": "object",
+      "required": ["action", "reason"],
+      "properties": {
+        "action": {"type": "string"},
+        "target": {"type": ["string", "null"]},
+        "reason": {"type": "string"},
+        "confidence": {"type": ["string", "null"]},
+        "failed_gates": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "code_targets": {
+      "type": "array",
+      "description": "Profiler-selected bounded source ranges. Read the slice before exploring other code.",
+      "items": {
+        "type": "object",
+        "required": ["id", "path", "lines", "slice"],
+        "properties": {
+          "id": {"type": "string"},
+          "hotspot": {"type": ["string", "null"]},
+          "wall_pct": {"type": ["number", "null"]},
+          "path": {"type": "string"},
+          "lines": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": ["integer", "null"]}},
+          "slice": {"type": "string"},
+          "confidence": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "required": ["baseline"],
+      "properties": {
+        "baseline": {"type": ["object", "null"]},
+        "variant": {"type": ["object", "null"]},
+        "profile_diff": {"type": ["object", "null"]},
+        "benchmark": {"type": ["object", "null"]},
+        "gates": {"type": ["object", "null"]},
+        "limits": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "required": ["packet", "drilldowns"],
+      "properties": {
+        "packet": {"type": "string"},
+        "key": {"type": "array", "items": {"type": "object"}},
+        "drilldowns": {"type": "object"}
+      }
+    },
+    "context": {
+      "type": "object",
+      "required": ["max_bytes", "packet_bytes", "estimated_tokens", "evidence_bytes_on_disk", "reduction_ratio"],
+      "properties": {
+        "max_bytes": {"type": "integer", "minimum": 512},
+        "packet_bytes": {"type": "integer", "minimum": 1},
+        "estimated_tokens": {"type": "integer", "minimum": 1},
+        "token_estimate_method": {"type": "string"},
+        "evidence_bytes_on_disk": {"type": "integer", "minimum": 0},
+        "reduction_ratio": {"type": ["number", "null"]},
+        "omissions": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}

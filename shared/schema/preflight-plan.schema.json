@@ -1,0 +1,54 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "profileweaver/preflight-plan.schema.json",
+  "title": "ProfileWeaver cached capability and launch preflight",
+  "type": "object",
+  "required": ["version", "run_id", "run_dir", "checks"],
+  "properties": {
+    "version": {"const": 1},
+    "run_id": {"type": "string"},
+    "run_dir": {"type": "string"},
+    "env": {"type": "object", "additionalProperties": {"type": "string"}},
+    "fingerprint_env": {"type": "array", "items": {"type": "string"}},
+    "fingerprint_inputs": {"type": "array", "items": {"type": "string"}},
+    "required_tools": {"type": "array", "items": {"type": "string"}},
+    "checks": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "required": ["id", "argv"],
+        "properties": {
+          "id": {"type": "string"},
+          "kind": {"enum": ["tool", "compiler", "device", "profiler", "build", "launch", "oracle", "other"]},
+          "argv": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+          "cwd": {"type": "string"},
+          "env": {"type": "object", "additionalProperties": {"type": "string"}},
+          "timeout_s": {"type": ["number", "null"], "minimum": 0},
+          "allow_failure": {"type": "boolean"},
+          "requires": {"type": "array", "items": {"type": "string"}},
+          "fingerprint_inputs": {"type": "array", "items": {"type": "string"}},
+          "produces": {"type": "array", "items": {"type": "string"}},
+          "expect": {
+            "type": "object",
+            "properties": {
+              "returncode": {"type": "integer"},
+              "source": {"enum": ["stdout", "stderr", "combined"]},
+              "regex": {"type": "string"}
+            }
+          },
+          "extract": {
+            "type": "array",
+            "items": {
+              "type": "object", "required": ["name", "regex"],
+              "properties": {
+                "name": {"type": "string"},
+                "regex": {"type": "string"},
+                "source": {"enum": ["stdout", "stderr", "combined"]},
+                "group": {"type": ["integer", "string"]}
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

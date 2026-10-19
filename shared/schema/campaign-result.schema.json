@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "profileweaver/campaign-result.schema.json",
+  "title": "ProfileWeaver generic campaign result",
+  "type": "object",
+  "required": ["protocol", "status", "run_id", "fingerprint"],
+  "properties": {
+    "protocol": {"const": "profileweaver.campaign-result/v1"},
+    "status": {"enum": ["complete", "failed"]},
+    "run_id": {"type": "string"},
+    "fingerprint": {"type": "string"},
+    "fingerprint_after": {"type": "string"},
+    "generated_utc": {"type": "string"},
+    "elapsed_s": {"type": "number", "minimum": 0},
+    "metric": {"type": "object"},
+    "sampling": {"type": "object"},
+    "builds": {"type": "object"},
+    "candidates": {"type": "array"},
+    "final": {"type": "object"},
+    "error": {"type": "string"}
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "profileweaver/source-targets.schema.json",
+  "title": "ProfileWeaver bounded source targets",
+  "type": "object",
+  "required": ["protocol", "policy", "targets", "unresolved"],
+  "properties": {
+    "protocol": {"const": "profileweaver.source-targets/v1"},
+    "profile": {"type": ["string", "null"]},
+    "search_roots": {"type": "array", "items": {"type": "string"}},
+    "policy": {"type": "string"},
+    "targets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "hotspot", "source", "slice", "resolution"],
+        "properties": {
+          "id": {"type": "string"},
+          "hotspot": {"type": "string"},
+          "wall_pct": {"type": ["number", "null"]},
+          "symbol": {"type": ["string", "null"]},
+          "source": {
+            "type": "object",
+            "required": ["path", "start_line", "end_line", "match_line"],
+            "properties": {
+              "path": {"type": "string"},
+              "start_line": {"type": "integer", "minimum": 1},
+              "end_line": {"type": "integer", "minimum": 1},
+              "match_line": {"type": "integer", "minimum": 1}
+            }
+          },
+          "slice": {"type": "object"},
+          "resolution": {"type": "object"}
+        }
+      }
+    },
+    "unresolved": {"type": "array"}
+  }
+}

@@ -140,7 +140,7 @@
       "required": ["class", "evidence", "confidence"],
       "properties": {
         "class": {
-          "enum": ["hotspot", "compute-bound", "memory-bandwidth", "memory-latency", "cache", "vectorization", "sync", "load-imbalance", "communication", "io", "gpu-occupancy", "gpu-idle", "transfer", "launch-overhead", "allocation", "serial-fraction", "indeterminate"]
+          "enum": ["hotspot", "compute-bound", "memory-bandwidth", "memory-latency", "cache", "vectorization", "sync", "load-imbalance", "communication", "io", "gpu-occupancy", "instruction-stalls", "register-pressure", "warp-divergence", "gpu-roofline", "gpu-idle", "transfer", "launch-overhead", "allocation", "serial-fraction", "indeterminate"]
         },
         "scope": { "type": ["string", "null"], "description": "Where the class applies: function, kernel, rank, or phase." },
         "evidence": {
@@ -172,6 +172,10 @@
           }
         }
       }
+    },
+    "kernel_diagnostics": {
+      "type": "object",
+      "description": "Optional bounded kernel-internal capsule, normally profileweaver.ncu-diagnostics/v1. Full counters remain raw artifacts."
     },
     "warnings": {
       "type": "array",
