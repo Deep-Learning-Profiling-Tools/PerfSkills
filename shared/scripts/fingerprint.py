@@ -25,9 +25,11 @@ def digest_directory(path: Path):
     for item in sorted(x for x in path.rglob("*") if x.is_file() and "__pycache__" not in x.parts):
         relative = str(item.relative_to(path)).encode()
         file_digest = digest_file(item)
-        digest.update(len(relative).to_bytes(8, "big")); digest.update(relative)
+        digest.update(len(relative).to_bytes(8, "big"))
+        digest.update(relative)
         digest.update(bytes.fromhex(file_digest["sha256"]))
-        count += 1; total += file_digest["bytes"]
+        count += 1
+        total += file_digest["bytes"]
     return {"path": str(path.resolve()), "kind": "directory", "files": count,
             "bytes": total, "sha256": digest.hexdigest()}
 

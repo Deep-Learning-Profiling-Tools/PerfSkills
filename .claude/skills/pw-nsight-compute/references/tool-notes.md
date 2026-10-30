@@ -65,9 +65,15 @@ The reducer preserves each NCU metric name beside its value. Common fields inclu
 | sectors/request | `*average*sectors_per_request*` | transaction/coalescing symptom where available |
 | launch shape | `launch__{grid,block}_size`, shared memory, waves/SM | geometry and residency inputs |
 | instructions/branch behavior | `smsp__inst_executed*`, branch-efficiency family | work and control-flow evidence where collected |
+| Roofline chain | NCU `SpeedOfLight_RooflineChart` work/traffic rates and peaks | FP32/FP64 resource bound, kernel opportunity ceiling, then Amdahl ROI ceiling with timing data |
 
 Metric availability varies. Missing data remains null/absent. Never rename an unrecognized raw
 metric into a familiar concept merely because its label sounds similar.
+
+The Roofline reducer follows the equations in the installed NVIDIA section file rather than a
+datasheet peak. It selects the precision with the largest measured work rate. Its kernel and ROI
+values are opportunity ceilings, not predicted achieved speedups; integer-only kernels or missing
+work/traffic counters remain explicitly unavailable.
 
 `kernel-diagnostics.json` is the default decision vector. Its `drilldowns` map points to bounded
 semantic files for `launch`, `occupancy`, `scheduler`, `stalls`, `instructions`, `control_flow`,

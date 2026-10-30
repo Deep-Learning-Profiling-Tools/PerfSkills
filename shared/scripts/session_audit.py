@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""Reduce a Codex JSONL rollout to measured token and interaction costs.
-
-The transcript stays on disk.  The default stdout is one compact status object; the detailed
-JSON is intended for ProfileWeaver's evidence plane, not normal agent context.
-"""
+"""Reduce a Codex JSONL rollout to measured token and interaction costs."""
 
 from __future__ import annotations
 
@@ -14,19 +10,16 @@ import re
 from collections import Counter
 from pathlib import Path
 
-
 def text_blocks(value):
     if not isinstance(value, list):
         return []
     return [block.get("text", "") for block in value
             if isinstance(block, dict) and isinstance(block.get("text"), str)]
 
-
 def preview_tool_input(raw: str, limit: int = 180) -> str:
     compact = " ".join(raw.split())
     compact = re.sub(r"/projects/[^\s\"']+", "<path>", compact)
     return compact[:limit]
-
 
 def tool_patterns(raw: str) -> list[str]:
     patterns = [
@@ -41,7 +34,6 @@ def tool_patterns(raw: str) -> list[str]:
         ("inline-program", r"python(?:3)?\s+(?:-|-[a-zA-Z]*c)\b|<<\s*['\"]?[A-Za-z]+"),
     ]
     return [name for name, expression in patterns if re.search(expression, raw, re.I | re.S)]
-
 
 def usage_segments(records: list[dict]) -> list[dict]:
     """Split cumulative token counters when a later user turn resets them."""
@@ -65,14 +57,12 @@ def usage_segments(records: list[dict]) -> list[dict]:
                        "uncached_total_tokens": uncached_input + (usage.get("output_tokens") or 0)})
     return result
 
-
 def sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
-
 
 def audit(path: Path):
     counts = Counter()
@@ -181,7 +171,6 @@ def audit(path: Path):
         "largest_tool_inputs": largest_inputs[:20],
     }
 
-
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("session", type=Path)
@@ -203,7 +192,6 @@ def main() -> int:
     print(json.dumps(summary if not args.print_summary else result,
                      separators=(",", ":") if not args.print_summary else None))
     return 0
-
 
 if __name__ == "__main__":
     raise SystemExit(main())

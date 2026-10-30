@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "name": "cuda-workload",
+  "source": ".",
+  "fingerprint_globs": ["*.cu", "*.cuh", "Makefile"],
+  "copy_ignore": ["*.o", "app", "__pycache__"],
+  "env": {"CPATH": "{repo}/shared/include"},
+  "execution": {
+    "build": ["make", "-j4", "SM_VERSION={cuda_arch}", "CC=nvcc -ccbin {host_cxx}"],
+    "build_cwd": "{workspace}",
+    "command": ["{workspace}/app"],
+    "cwd": "{workspace}",
+    "build_timeout_s": 600,
+    "timeout_s": 300
+  },
+  "metric": {"name": "roi", "unit": "s", "source": "stdout", "direction": "lower", "regex": "Runtime: ([0-9.]+)"},
+  "oracle": {"type": "returncode"},
+  "profiling": {"roi_name": "hpcperf:roi", "ncu_timeout_s": 1800},
+  "sampling": {
+    "mode": "standard",
+    "warmup": 1,
+    "min_pairs": 5,
+    "max_pairs": 7,
+    "final_min_pairs": 7,
+    "final_max_pairs": 11,
+    "finalists": 2,
+    "bootstrap_iterations": 1000,
+    "practical_threshold": 1.02,
+    "wall_gate": "advisory"
+  }
+}

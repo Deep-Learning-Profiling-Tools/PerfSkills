@@ -5,7 +5,7 @@ question into a measurement request, routes it to the cheapest tool expert that 
 and adjudicates what comes back. Each child skill (`pw-*`) owns exactly one profiler.
 
 The deliverable is never "it got faster." It is a **rewrite you can trust**: a measured,
-significant improvement, a passing correctness oracle, and a reprofile proving the gain came
+significant improvement, a passing correctness oracle, and profiler deltas proving the gain came
 from where the diagnosis said it would.
 
 ## Works in both Claude Code and Codex
@@ -74,36 +74,54 @@ Start at `.claude/skills/profile-weaver/SKILL.md`. `README.md` has the full pict
 
 Optimize from measured evidence with minimal agent context.
 
-1. Record the exact build, command, input, environment, oracle, metric, and baseline fingerprint.
-2. Route to the cheapest capable child listed in
-   `.claude/skills/profile-weaver/references/registry.md`. Never invent measurements or attribute
-   a mechanism the selected profiler cannot observe; unknown values remain `null`. Invoke
-   `shared/scripts/route.py`; do not read the registry, automation reference, or schemas during a
-   routine run.
-3. Consume only compact briefs, per-iteration delta capsules, and their named source slices.
-   Resolve one named dependency at a time; never browse the application, raw traces, full
-   profiles, logs, or large JSON broadly.
-4. Profile every correct candidate once with the routed timing child. Let the controller cache
-   the capture, normalize and diff it, and advance the measured hotspot frontier; confirmation
-   reuses that evidence and the accepted winner receives a fresh final reprofile.
-5. For NVIDIA kernel-internal questions, use `pw-nsight-systems` to name and time one hotspot,
-   then `pw-nsight-compute --section all` for that bounded kernel. Every correct candidate must
-   return an NCU disposition: capture when its kernel-evidence fingerprint changes, otherwise
-   explicit reuse. Consume parent- and baseline-relative deltas from the ≤480-token brief or one
-   named metric group, never the full counter table. Freshly replay the accepted winner.
-6. Work on the largest measured hotspot. Screen up to three orthogonal structural hypotheses per
-   batch and change one variable per candidate. Preserve numerical and communication semantics.
-7. Use `shared/scripts/experiment.py` for candidate preparation, evaluation, confirmation, and
-   finalization. Edit candidate source only. Do not write inline or run-local orchestration,
-   polling, inspection, summary, validation, or reporting programs. Declare `kernel_profile`
-   once; let `init` collect baseline NCU and `evaluate` automatically capture or reuse evidence
-   for every candidate. Use `--ncu ID` only to force a replay. Let confirmation freshly profile
-   the winner. Never create or patch a harness plan for NCU.
+1. Invoke `python3 shared/scripts/experiment.py start --workload <directory>`; an optional
+   `profileweaver.json` supplies non-default build, command, oracle, metric, or profiling facts.
+   When it is absent, the backend derives a conservative contract from standard build files and
+   the executable. Never hand-author or edit run JSON.
+2. Invoke only `shared/scripts/experiment.py`; `start` routes profilers, runs cached preflight,
+   builds and validates the baseline, captures NSYS and NCU, and records the decision. Never infer
+   a mechanism a selected profiler cannot observe; unknown values remain `null`.
+3. Read only compact profile briefs, per-iteration delta capsules, and their named source slices.
+   Edit only returned candidate source workspaces. Never read framework Python, schemas, plans,
+   state, README files, child `pw-*` skill files, raw traces, full logs, or unrelated benchmark
+   source.
+   If the brief names `existing-variant` source slices, read those bounded sibling implementations
+   (which may be in another declared source file) as structural references; they are not measurements
+   and do not justify skipping correctness or paired timing gates. Use the compact dependency frontier
+   to follow producer/transfer/consumer edges without browsing unrelated source.
+4. Use a timing profiler once to discover the baseline hotspot. Rank candidates with the declared
+   unprofiled metric, preferably CUDA-event or application ROI time for a kernel objective, and
+   retain whole-process time as a collateral check. Re-run the full timing profile only when an
+   attribution or collateral-cost gate remains unresolved.
+5. For NVIDIA kernel-internal questions, use baseline NSYS to name and time one hotspot, then
+   baseline NCU full evidence. Every correct candidate in standard mode returns an NCU capture/reuse
+   disposition and parent- plus baseline-relative deltas. A workload using
+   `sampling.mode=winner-confirmation` returns timing deltas during screening and defers candidate
+   replay until the best candidate is selected; its final winner campaign restores the full NCU
+   evidence and multi-run gates. Candidate replay uses only diagnosis-relevant NCU
+   sections verified by preflight; fall back to full evidence when a safe tier is unavailable.
+   Reuse the winner's paired benchmark and candidate NCU evidence by default.
+6. Use the largest measured remaining cost and the emitted source/dataflow evidence to design the
+   candidate. Prepare and evaluate exactly one candidate per step to keep the returned evidence
+   compact; this is not a restriction on the agent's search. A candidate may contain several
+   linked edits across the bounded hotspot/callee/data dependency slices, including cross-file
+   producer/consumer changes. After the compact verdict, use the accepted measured candidate as
+   the next parent, or deliberately branch from any preserved parent after a regression. Sibling
+   references and GPA classifications are descriptive evidence; never reject or defer an
+   agent-proposed candidate because it repeats, departs from, or is absent from them. Preserve
+   numerical and communication semantics. ProfileWeaver never authors or applies source edits:
+   it emits measured deltas and bounded source evidence, while Codex supplies the candidate
+   mechanism, parent, and edits.
+7. Use `shared/scripts/experiment.py` for start, inspection, candidate preparation,
+   evaluation, confirmation, and finalization. Edit candidate source only. Do not write inline or
+   run-local orchestration, polling, inspection, summary, validation, or reporting programs.
+   Do not repair framework code during a journey. Let the backend create contracts, collect,
+   reduce, cache, diff, and finalize.
 8. For long commands, wait on the existing session at the longest practical interval. Do not
    combine waits with `tail`, `ps`, JSON readers, or raw-log reads. Prefer non-login `/bin/sh`;
    establish any required module environment once in cached preflight.
 9. Accept only a correct, significant absolute improvement under the same fingerprint whose
-   reprofile shows the targeted cost fell and collateral cost did not erase the gain. An
+   candidate profile shows the targeted cost fell and collateral cost did not erase the gain. An
    unresolved gate is `inconclusive`, never a speedup.
 10. Keep detailed application/profiler output under `raw/`. Return one compact verdict and artifact
    paths. Record cost with `shared/scripts/tokens.py`.

@@ -3,7 +3,7 @@
   "$id": "profileweaver/agent-brief.schema.json",
   "title": "ProfileWeaver decision brief",
   "type": "object",
-  "required": ["protocol", "run_id", "phase", "action", "measurement", "source", "campaign", "frontier", "trust", "artifacts", "context"],
+  "required": ["protocol", "run_id", "phase", "action", "measurement", "source", "campaign", "trust", "artifacts", "context"],
   "properties": {
     "protocol": {"const": "profileweaver.agent-brief/v1"},
     "run_id": {"type": "string"},
@@ -12,7 +12,7 @@
     "measurement": {"type": "object"},
     "source": {"type": "object"},
     "campaign": {"type": "object"},
-    "frontier": {"type": "array"},
+    "candidate_authority": {"const": "agent"},
     "trust": {"type": "object"},
     "artifacts": {"type": "object"},
     "context": {

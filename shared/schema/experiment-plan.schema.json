@@ -9,9 +9,28 @@
     "run_id": {"type": "string"},
     "run_dir": {"type": "string"},
     "question": {"type": ["string", "null"]},
+    "budget": {
+      "type": "object",
+      "properties": {
+        "iterations": {"type": "integer", "minimum": 1},
+        "repairs_per_iteration": {"type": "integer", "minimum": 1}
+      }
+    },
     "env": {"type": "object", "additionalProperties": {"type": "string"}},
+    "profiling": {
+      "type": ["object", "null"],
+      "properties": {
+        "discovery_needs": {"type": "array", "items": {"type": "string"}},
+        "diagnostic_needs": {"type": "array", "items": {"type": "string"}},
+        "available": {"type": "array", "items": {"type": "string"}},
+        "artifacts": {"type": "array", "items": {"type": "string"}},
+        "tool_paths": {"type": "object", "additionalProperties": {"type": "string"}},
+        "allow_unavailable": {"type": "boolean"}
+      }
+    },
     "timeout_s": {"type": ["number", "null"], "minimum": 0},
     "build_baseline": {"type": "boolean"},
+    "preflight_plan": {"type": ["string", "null"]},
     "source": {
       "type": "object",
       "required": ["baseline_dir", "fingerprint_globs"],
@@ -45,6 +64,7 @@
         "baseline_profile": {"type": "string"},
         "profile_output": {"type": "string"},
         "source_targets": {"type": "string"},
+        "cadence": {"enum": ["baseline-final", "every-candidate"]},
         "max_delta_items": {"type": "integer", "minimum": 1, "maximum": 3},
         "env": {"type": "object", "additionalProperties": {"type": "string"}},
         "stages": {
@@ -58,11 +78,16 @@
       "properties": {
         "enabled": {"type": "boolean"},
         "section": {"type": "string"},
+        "baseline_sections": {"oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]},
+        "candidate_sections": {"oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]},
+        "reprofile_sections": {"oneOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}]},
+        "available_sections": {"type": "array", "items": {"type": "string"}},
         "executable": {"type": "string"},
         "tool_version": {"type": "string"},
         "baseline_kernel_regex": {"type": "string"},
         "variant_kernel_regex": {"type": "string"},
         "exact_kernel": {"type": "boolean"},
+        "nvtx_include": {"type": "string"},
         "launch_count": {"type": "integer", "minimum": 1, "maximum": 8},
         "timeout_s": {"type": "number", "minimum": 1},
         "fingerprint_inputs": {
@@ -70,6 +95,13 @@
         },
         "final_timeline_profile": {"type": "string"},
         "env": {"type": "object", "additionalProperties": {"type": "string"}}
+      }
+    },
+    "kernel_timing": {
+      "type": ["object", "null"],
+      "properties": {
+        "source": {"enum": ["cuda-event", "nvtx", "ncu-duration", "stdout", "wall"]},
+        "detail": {"type": ["string", "null"]}
       }
     },
     "finalize": {
@@ -135,7 +167,11 @@
       "type": "object",
       "required": ["min_pairs", "max_pairs", "final_min_pairs", "final_max_pairs", "practical_threshold"],
       "properties": {
+        "mode": {"enum": ["standard", "winner-confirmation"]},
         "warmup": {"type": "integer", "minimum": 0},
+        "screen_warmup": {"type": "integer", "minimum": 0},
+        "screen_min_pairs": {"type": "integer", "minimum": 1},
+        "screen_max_pairs": {"type": "integer", "minimum": 1},
         "min_pairs": {"type": "integer", "minimum": 5},
         "max_pairs": {"type": "integer", "minimum": 5},
         "final_min_pairs": {"type": "integer", "minimum": 5},
@@ -143,6 +179,7 @@
         "finalists": {"type": "integer", "minimum": 1},
         "bootstrap_iterations": {"type": "integer", "minimum": 200},
         "practical_threshold": {"type": "number", "exclusiveMinimum": 1.0}
+        ,"wall_gate": {"enum": ["advisory", "strict", "off"]}
       }
     },
     "attribution": {
