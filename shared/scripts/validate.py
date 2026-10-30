@@ -83,6 +83,20 @@ def check(value, schema, root, path, errors):
             errors.append(f"{path}: {value} is above maximum {schema['maximum']}")
 
 
+def errors_for(schema, document):
+    """Return schema violations using jsonschema when present, else the built-in subset."""
+    try:
+        import jsonschema
+        validator = jsonschema.Draft7Validator(schema)
+        errors = [f"{'.'.join(str(p) for p in item.absolute_path) or '<root>'}: {item.message}"
+                  for item in validator.iter_errors(document)]
+        return errors, "jsonschema"
+    except ImportError:
+        errors = []
+        check(document, schema, schema, "", errors)
+        return errors, "builtin subset checker"
+
+
 def main():
     if len(sys.argv) != 3:
         print(__doc__, file=sys.stderr)
@@ -97,16 +111,7 @@ def main():
         print(f"error: {e}", file=sys.stderr)
         return 2
 
-    try:
-        import jsonschema
-        validator = jsonschema.Draft7Validator(schema)
-        errors = [f"{'.'.join(str(p) for p in e.absolute_path) or '<root>'}: {e.message}"
-                  for e in validator.iter_errors(doc)]
-        engine = "jsonschema"
-    except ImportError:
-        errors = []
-        check(doc, schema, schema, "", errors)
-        engine = "builtin subset checker"
+    errors, engine = errors_for(schema, doc)
 
     if errors:
         print(f"INVALID ({engine}) - {len(errors)} problem(s) in {doc_path}:")

@@ -51,6 +51,7 @@
           "throughput": {"type": "object"},
           "memory": {"type": "object"},
           "instructions": {"type": "object"},
+          "roofline": {"type": "object"},
           "signals": {"type": "array", "maxItems": 3},
           "evidence": {
             "type": "array", "maxItems": 12,

@@ -39,6 +39,8 @@ def main() -> int:
     parser.add_argument("--kernel-name", required=True,
                         help="Exact or regex body for one kernel; regex mode is the default")
     parser.add_argument("--exact-kernel", action="store_true")
+    parser.add_argument("--nvtx-include", default=None,
+                        help="Verified NCU NVTX include expression used with --nvtx")
     parser.add_argument("--launch-skip", type=int, default=0)
     parser.add_argument("--launch-count", type=int, default=1)
     parser.add_argument("--section", action="append", default=["all"],
@@ -80,6 +82,7 @@ def main() -> int:
         args.ncu, "--target-processes", "all", "--replay-mode", "kernel",
         "--kernel-name-base", "demangled", "--kernel-name", kernel_filter,
         "--launch-skip", str(args.launch_skip), "--launch-count", str(args.launch_count),
+        *(["--nvtx", "--nvtx-include", args.nvtx_include] if args.nvtx_include else []),
         *selector, "--force-overwrite", "--export", str(report_base),
         "--log-file", str(output / "capture.log.txt"), *command,
     ]
@@ -116,7 +119,7 @@ def main() -> int:
                  "executable": args.ncu},
         "requested": {"section": sections, "kernel_name": args.kernel_name,
                       "exact_kernel": args.exact_kernel, "launch_skip": args.launch_skip,
-                      "launch_count": args.launch_count},
+                      "launch_count": args.launch_count, "nvtx_include": args.nvtx_include},
         "resolved": resolved_mode | {"kernel_filter": kernel_filter, "replay_mode": "kernel"},
         "timing": {"capture_elapsed_s": round(capture_s, 6),
                    "export_elapsed_s": round(export_total_s, 6),

@@ -140,7 +140,7 @@
       "required": ["class", "evidence", "confidence"],
       "properties": {
         "class": {
-          "enum": ["hotspot", "compute-bound", "memory-bandwidth", "memory-latency", "cache", "vectorization", "sync", "load-imbalance", "communication", "io", "gpu-occupancy", "instruction-stalls", "register-pressure", "warp-divergence", "gpu-roofline", "gpu-idle", "transfer", "launch-overhead", "allocation", "serial-fraction", "indeterminate"]
+          "enum": ["hotspot", "compute-bound", "compute-throughput", "memory-bandwidth", "memory-latency", "memory-transaction-waste", "cache", "vectorization", "sync", "load-imbalance", "communication", "io", "gpu-occupancy", "occupancy-resource-limit", "instruction-stalls", "scheduler-starvation", "register-pressure", "register-spill", "warp-divergence", "control-divergence", "gpu-roofline", "gpu-idle", "transfer", "launch-overhead", "allocation", "serial-fraction", "unclassified", "indeterminate"]
         },
         "scope": { "type": ["string", "null"], "description": "Where the class applies: function, kernel, rank, or phase." },
         "evidence": {

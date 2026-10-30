@@ -19,6 +19,14 @@
           "hotspot": {"type": "string"},
           "wall_pct": {"type": ["number", "null"]},
           "symbol": {"type": ["string", "null"]},
+          "dependency": {
+            "type": "object",
+            "required": ["relation", "parent"],
+            "properties": {
+              "relation": {"enum": ["callee", "declaration", "writer", "transfer-or-allocation", "existing-variant"]},
+              "parent": {"type": "string"}
+            }
+          },
           "source": {
             "type": "object",
             "required": ["path", "start_line", "end_line", "match_line"],

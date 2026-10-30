@@ -10,25 +10,11 @@ timing child; never replay every kernel. Reuse cached preflight for `ncu --versi
 sets/sections, device access, and counter permission. Preserve the exact executable, input,
 environment, launcher, device mapping, oracle, and baseline fingerprint.
 
-Collect one matching launch. ProfileWeaver's `--section all` is a portable intent: the capture
-wrapper validates it as the installed NCU all-sections set and records the resolved command. On
-the tested 2025.3 build this becomes `--set full`; it never sends the invalid literal
-`ncu --section all`.
-
-```bash
-python3 .claude/skills/pw-nsight-compute/scripts/capture.py \
-  --output-dir runs/<id>/raw/ncu-baseline \
-  --kernel-name '<escaped-kernel-regex>' --launch-count 1 --section all \
-  --tool-version '<cached-preflight-version>' -- <exact workload command>
-
-python3 .claude/skills/pw-nsight-compute/scripts/reduce_csv.py \
-  --csv runs/<id>/raw/ncu-baseline/metrics.csv \
-  --capture-metadata runs/<id>/raw/ncu-baseline/capture.json \
-  --timeline-profile runs/<id>/profile.baseline.json \
-  --run-id <id> --phase baseline \
-  --output runs/<id>/profile.ncu.baseline.json \
-  --diagnostics-output runs/<id>/kernel-diagnostics.json
-```
+Collect one matching launch through the ProfileWeaver experiment controller. Its backend resolves
+`section=all` to the installed NCU all-sections mode, records the exact resolved command, captures
+the report, exports raw/details/source pages, reduces them, validates the artifacts, and caches the
+result. The agent must not invoke the capture or reducer scripts directly during a ProfileWeaver
+journey.
 
 The capture emits one terminal record containing status, NCU capture time, export time, and the
 metadata path. Target output, profiler output, the `.ncu-rep`, all metrics, rules, and source
@@ -44,8 +30,22 @@ supports that conclusion. Likewise, stall shares, cache rates, occupancy, and th
 joint evidence, not isolated optimization goals. Read `references/tool-notes.md` for metric
 semantics, replay caveats, permission failures, or a version mismatch.
 
-For iteration, keep Nsight Systems as the per-candidate timing child. Cache this expensive full
-NCU baseline by fingerprint. Recollect NCU only when a correct candidate changes the diagnosed
-kernel mechanism, or for a fresh accepted-winner reprofile. Accept a rewrite only when absolute
-runtime improves under the same fingerprint and the relevant NCU cost also falls without a
-larger collateral regression.
+Under the root ProfileWeaver workflow, the agent invokes only `shared/scripts/experiment.py`;
+the capture and reducer are backend details. Use a baseline timeline
+once to establish absolute cost. Rank candidates with CUDA-event/ROI timing plus a whole-process
+collateral check. Every correct changed kernel receives filtered NCU evidence and parent- plus
+baseline-relative deltas; an unchanged kernel explicitly reuses its fingerprinted evidence.
+
+Baseline and accepted-winner captures use the full set. Candidate capture follows a hierarchy:
+launch/resource and scheduler/warp evidence are the core; memory, compute/instruction, source, or
+control-flow sections are added according to the current diagnosis. The verified
+`SpeedOfLight_RooflineChart` section accompanies automatic candidate tiers so the backend can
+update the Roofline → kernel → Amdahl chain each iteration. Only section names verified by cached
+preflight may be used. If no verified focused tier exists, collect the full set rather than guess
+a flag. A new diagnosis advances the next candidate's tier.
+
+NVTX may bound an existing stable application phase and a kernel regex selects the measured
+kernel inside it. NVTX identifies scope; a CUDA event or application ROI timer supplies candidate
+time. NCU replay duration is recorded separately as profiling cost. Accept a rewrite only when
+absolute runtime improves under the same fingerprint and the relevant counter cost also falls
+without a larger collateral regression.

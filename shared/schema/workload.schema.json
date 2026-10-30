@@ -1,0 +1,51 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "profileweaver/workload.schema.json",
+  "title": "ProfileWeaver workload manifest",
+  "type": "object",
+  "required": ["version", "name", "fingerprint_globs", "execution", "metric"],
+  "properties": {
+    "version": {"const": 1},
+    "name": {"type": "string", "minLength": 1},
+    "question": {"type": "string"},
+    "source": {"type": "string"},
+    "fingerprint_globs": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+    "copy_ignore": {"type": "array", "items": {"type": "string"}},
+    "env": {"type": "object", "additionalProperties": {"type": "string"}},
+    "execution": {
+      "type": "object", "required": ["build", "command"],
+      "properties": {
+        "build": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "build_cwd": {"type": "string"},
+        "build_timeout_s": {"type": "number", "minimum": 1},
+        "command": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "cwd": {"type": "string"}, "timeout_s": {"type": "number", "minimum": 1},
+        "env": {"type": "object", "additionalProperties": {"type": "string"}}
+      }
+    },
+    "metric": {"type": "object"}, "oracle": {"type": ["object", "null"]},
+    "sampling": {
+      "type": "object",
+      "properties": {
+        "mode": {"enum": ["standard", "winner-confirmation"]},
+        "screen_warmup": {"type": "integer", "minimum": 0},
+        "screen_min_pairs": {"type": "integer", "minimum": 1},
+        "screen_max_pairs": {"type": "integer", "minimum": 1},
+        "warmup": {"type": "integer", "minimum": 0},
+        "min_pairs": {"type": "integer", "minimum": 5},
+        "max_pairs": {"type": "integer", "minimum": 5},
+        "final_min_pairs": {"type": "integer", "minimum": 5},
+        "final_max_pairs": {"type": "integer", "minimum": 5},
+        "finalists": {"type": "integer", "minimum": 1},
+        "bootstrap_iterations": {"type": "integer", "minimum": 200},
+        "practical_threshold": {"type": "number", "exclusiveMinimum": 1.0},
+        "wall_gate": {"enum": ["advisory", "strict", "off"]}
+      }
+    },
+    "profiling": {"type": "object", "properties": {
+      "cadence": {"enum": ["baseline-final", "every-candidate"]},
+      "roi_name": {"type": "string"}, "ncu_timeout_s": {"type": "number", "minimum": 1}
+    }},
+    "kernel_fingerprint_inputs": {"type": "array", "items": {"type": "string"}}
+  }
+}

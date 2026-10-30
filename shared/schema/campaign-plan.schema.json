@@ -57,7 +57,11 @@
       "type": "object",
       "required": ["min_pairs", "max_pairs", "final_min_pairs", "final_max_pairs", "practical_threshold"],
       "properties": {
+        "mode": {"enum": ["standard", "winner-confirmation"]},
         "warmup": {"type": "integer", "minimum": 0},
+        "screen_warmup": {"type": "integer", "minimum": 0},
+        "screen_min_pairs": {"type": "integer", "minimum": 1},
+        "screen_max_pairs": {"type": "integer", "minimum": 1},
         "min_pairs": {"type": "integer", "minimum": 5},
         "max_pairs": {"type": "integer", "minimum": 5},
         "final_min_pairs": {"type": "integer", "minimum": 5},

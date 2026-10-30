@@ -92,9 +92,8 @@ next one a *narrowed scope*.
 For NVIDIA GPU optimization, use a staged form of rungs 4–5: Nsight Systems identifies and
 times the expensive kernel; Nsight Compute replays one launch to explain it. Keep NCU's full
 metrics and report off-context. The agent receives only a bounded diagnostic capsule with raw
-metric provenance and the named source slice. Use timeline profiling for every correct
-candidate; repeat full NCU only when a candidate changes the diagnosed mechanism and for the
-accepted winner's fresh confirmation.
+metric provenance and named source slices. Use filtered NCU for each correct changed candidate;
+repeat NSYS or full NCU only when a trust gate remains unresolved.
 
 Skip rungs only with a stated reason (e.g. user already has a sampling profile with a run id).
 
