@@ -55,9 +55,17 @@ def preflight(run_id: str, run: Path, source: Path, found: dict[str, str]) -> di
             "fingerprint_inputs": [str(source)], "checks": checks}
 
 
-def _profile_stages(found: dict[str, str], roi: str, command: list[str]) -> list[dict]:
+def _profile_stages(found: dict[str, str], roi: str, command: list[str],
+                    source_symbols: list[str]) -> list[dict]:
     reducer = REPO / ".claude/skills/pw-nsight-systems/scripts/reduce_sqlite.py"
     locator = REPO / "shared/scripts/locate_source.py"
+    locate_argv = ["python3", str(locator), "--profile", "{profile_output}",
+                   "--run-dir", "{profile_dir}", "--source-root", "{workspace}",
+                   "--repo-root", "{repo}", "--output", "{profile_dir}/source-targets.json",
+                   "--max-targets", "6", "--max-variants", "3", "--dependency-depth", "3",
+                   "--max-dependencies", "9"]
+    for symbol in source_symbols:
+        locate_argv += ["--symbol", symbol]
     return [
         {"id": "nsys-capture", "argv": [found["nsys"], "profile", "--trace=cuda,nvtx",
          "--sample=none", "--cpuctxsw=none", "--stats=false", "--force-overwrite=true",
@@ -74,16 +82,14 @@ def _profile_stages(found: dict[str, str], roi: str, command: list[str]) -> list
          "--details-output", "{profile_dir}/roi-metrics.json"], "cwd": "{repo}",
          "fingerprint_inputs": [str(reducer)],
          "produces": ["{profile_output}", "{profile_dir}/roi-metrics.json"]},
-        {"id": "locate", "argv": ["python3", str(locator), "--profile", "{profile_output}",
-         "--run-dir", "{profile_dir}", "--source-root", "{workspace}", "--repo-root",
-         "{repo}", "--output", "{profile_dir}/source-targets.json", "--max-targets", "4",
-         "--max-variants", "3", "--dependency-depth", "3", "--max-dependencies", "9"], "cwd": "{repo}",
+        {"id": "locate", "argv": locate_argv, "cwd": "{repo}",
          "fingerprint_inputs": [str(locator)],
          "produces": ["{profile_dir}/source-targets.json"]},
     ]
 
 
-def _final_stages(found: dict[str, str], roi: str, command: list[str]) -> list[dict]:
+def _final_stages(found: dict[str, str], roi: str, command: list[str],
+                  source_symbols: list[str]) -> list[dict]:
     reducer = REPO / ".claude/skills/pw-nsight-systems/scripts/reduce_sqlite.py"
     raw = "{run_dir}/raw/final"
     return [
@@ -109,6 +115,7 @@ def experiment(manifest: dict, run_id: str, run: Path, baseline: Path,
                found: dict[str, str], iterations: int, repairs: int) -> dict:
     execution = manifest["execution"]
     profiling = manifest.get("profiling") or {}
+    source_symbols = [str(symbol) for symbol in manifest.get("source_symbols", [])]
     pattern = profiling.get("kernel_regex") or AUTO_KERNEL
     command = execution["command"]
     sampling = manifest.get("sampling") or {"mode": "standard", "warmup": 1,
@@ -138,7 +145,7 @@ def experiment(manifest: dict, run_id: str, run: Path, baseline: Path,
             "cadence": profiling.get("cadence", "baseline-final"),
             "max_delta_items": 2,
             "stages": _profile_stages(found, profiling.get("roi_name", "hpcperf:roi"),
-                                      command)},
+                                      command, source_symbols)},
         "kernel_profile": {"enabled": True, "section": "all", "candidate_sections": "auto",
             "executable": found["ncu"], "baseline_kernel_regex": pattern,
             "variant_kernel_regex": pattern, "launch_count": 1,
@@ -147,7 +154,7 @@ def experiment(manifest: dict, run_id: str, run: Path, baseline: Path,
         "kernel_timing": {"source": "ncu-duration", "detail": "filtered hotspot kernel"},
         "finalize": {"run_finalizer": True,
                      "stages": _final_stages(found, profiling.get("roi_name", "hpcperf:roi"),
-                                              command)},
+                                              command, source_symbols)},
     }
     plan["kernel_profile"]["final_timeline_profile"] = "{run_dir}/profile.reprofile.json"
     return plan

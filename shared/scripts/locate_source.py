@@ -59,8 +59,8 @@ def main():
                   "resolution_mode": "definition"} for symbol in args.symbol] +
                 [{"name": symbol, "kind": "unknown", "pct_of_wall": None,
                   "resolution_mode": "call-site"} for symbol in args.call_site])
-    actionable = (explicit if explicit else
-                  [h for h in profile.get("hotspots", []) if h.get("kind") not in {"memcpy", "sync", "runtime", "library"}])
+    actionable = explicit + [h for h in profile.get("hotspots", [])
+                             if h.get("kind") not in {"memcpy", "sync", "runtime", "library"}]
 
     for hotspot in actionable:
         if len(targets) - original_target_count >= args.max_targets:
