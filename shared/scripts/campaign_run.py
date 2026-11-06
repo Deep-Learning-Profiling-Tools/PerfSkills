@@ -12,7 +12,9 @@ from campaign_stats import SEED, decision, improvement, summarize
 
 
 def run_command(item, label, sample_index, plan, run_dir, variables):
-    item_vars = variables | {"id": item["id"], "sample": str(sample_index), "label": label}
+    item_vars = variables | {"id": item["id"], "sample": str(sample_index), "label": label,
+                             "workspace": item.get("workspace", variables.get("workspace", "")),
+                             "run_dir": item.get("run_dir", variables.get("run_dir", ""))}
     cwd = resolve(item.get("cwd", str(REPO)), item_vars)
     argv = [expand(x, item_vars) for x in item["command"]]
     env = os.environ.copy() | {key: expand(value, item_vars) for key, value in plan.get("env", {}).items()}
@@ -39,7 +41,9 @@ def run_command(item, label, sample_index, plan, run_dir, variables):
 def run_build(item, plan, run_dir, variables):
     if not item.get("build"):
         return None
-    item_vars = variables | {"id": item["id"]}
+    item_vars = variables | {"id": item["id"],
+                             "workspace": item.get("workspace", variables.get("workspace", "")),
+                             "run_dir": item.get("run_dir", variables.get("run_dir", ""))}
     cwd = resolve(item.get("build_cwd", item.get("cwd", str(REPO))), item_vars)
     argv = [expand(x, item_vars) for x in item["build"]]
     env = os.environ.copy() | {key: expand(value, item_vars) for key, value in plan.get("env", {}).items()}

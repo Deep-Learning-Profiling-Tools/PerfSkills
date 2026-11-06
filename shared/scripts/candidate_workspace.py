@@ -125,6 +125,8 @@ def item(plan: dict, workspace: Path, candidate_id: str, patch: Path | None,
                  "run_id": plan["run_id"], "workspace": str(workspace), "id": candidate_id}
     execution = plan["execution"]
     result = {"id": candidate_id,
+              "workspace": str(workspace),
+              "run_dir": variables["run_dir"],
               "command": [expand(value, variables) for value in execution["command"]],
               "cwd": expand(execution.get("cwd", "{workspace}"), variables),
               "fingerprint_inputs": [str(path) for path in source_files(
