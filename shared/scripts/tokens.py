@@ -26,13 +26,18 @@ def main():
                     help="which tokenizer to count with: claude -> Anthropic count_tokens API, "
                          "codex -> tiktoken o200k_base. Default auto-detects the running agent.")
     ap.add_argument("--session-id", default=None, help="transcript to read (default: newest)")
+    ap.add_argument("--inventory", action="store_true", help="explicit full skill/reference inventory")
     ap.add_argument("--json", action="store_true", help="emit JSON instead of a table")
     a = ap.parse_args()
 
     agent = detect_agent() if a.agent == 'auto' else a.agent
-    count, method, exact = _counter(a.agent)
     loaded = parse_loaded_arg(a.loaded) if a.loaded else None
-    skills = measure_skills(count, loaded)
+    inventory = a.inventory or a.mode == "skills"
+    if inventory or loaded:
+        count, method, exact = _counter(a.agent)
+        skills = measure_skills(count, loaded, inventory=inventory)
+    else:
+        method, exact, skills = "not-requested", None, []
 
     # Real end-to-end consumption, read from the agent's own transcript. Anything the CLI did
     # not record stays null - never substitute the skill-definition figure for it.
@@ -54,7 +59,8 @@ def main():
         "agent": agent,
         "method": method,
         "exact": exact,
-        "tree_skill_md_tokens": tree_total,
+        "scope": "definition-text-under-named-tokenizer",
+        "tree_skill_md_tokens": tree_total if inventory else None,
         "skills": skills,
         "skill_definition_tokens_charged": charged,
         "session": session,
@@ -69,9 +75,17 @@ def main():
         d = REPO / "runs" / a.run_id
         if not d.is_dir():
             ap.error(f"no run directory at {d}")
+        if a.session_total is not None and (d / "experiment-plan.json").is_file():
+            from resource_inputs import token_usage
+            token_usage(d, a.session_total)
         (d / "cost.json").write_text(json.dumps(payload, indent=2) + "\n")
         print(f"wrote {d / 'cost.json'}")
 
+    if not inventory and not a.json:
+        print(json.dumps({"artifact": str(d / "cost.json") if a.mode == "run" else None,
+                          "skill_definition_tokens": charged, "definition_tokenizer": method,
+                          "session": session}, separators=(",", ":")))
+        return 0
     if a.json:
         print(json.dumps(payload, indent=2))
         return 0

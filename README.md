@@ -46,12 +46,31 @@ For code review, follow the start path in this order:
 5. `shared/scripts/experiment_state.py` — cached baseline initialization and persistent state.
 6. `shared/scripts/experiment_bootstrap.py` — preflight, build, correctness, and baseline profile.
 
-Long-running workloads may set `sampling.mode` to `winner-confirmation` and
+New runs use adaptive acquisition: one or two provisional screening pairs, static CUDA binary
+resources, and capability/cost-based selection of CUPTI activity, NSYS context, or NCU counters.
+Use `evaluate ID --need CAPABILITY` to ask a precise profiling question, and `check ID --observe`
+to share correctness validation with lightweight activity collection before paired timing.
+Independent final confirmation and full winner evidence remain required. See
+[adaptive acquisition](.claude/skills/profile-weaver/references/adaptive-acquisition.md) and the
+[resource-accounting follow-on](.claude/skills/profile-weaver/references/resource-accounting.md).
+Existing plans retain their policy; `start --policy legacy` preserves previous defaults.
+Adaptive screens expose reporting precision and variability. An overlapping contender may join
+independent final confirmation (at most two finalists); final pairs determine their order or
+report a practical tie. Candidate counters name the captured kernel and source snapshot;
+older timeline times stay baseline context. `start --baseline-reference <source-directory>`
+optionally checks declared source, including unused headers, before measuring.
+Adaptive evaluations deliver current evidence inline with a 640-token cap and named
+drill-downs. Native HPCToolkit/GPA adapters supply calling-context or sampled instruction evidence
+when probes establish compatibility; they do not rebuild or edit the application. See
+[native providers](.claude/skills/profile-weaver/references/native-providers.md). Runtime cost
+events distinguish executed measurements, builds, captures, and cached retries.
+
+Legacy long-running workloads may set `sampling.mode` to `winner-confirmation` and
 `profiling.cadence` to `every-candidate` in their manifest. Each screening iteration then performs
 one paired baseline/candidate execution plus an NSYS timeline delta and marks its result
 exploratory; candidate NCU replay is deferred. After the iteration budget, only the best measured
 candidate receives the configured multi-pair confirmation and full winner profiling. The standard
-five-pair screening and per-candidate evidence path remains the default for other workloads.
+five-pair screening and per-candidate evidence path remains available in legacy mode.
 
 ## Works in both Claude Code and Codex
 

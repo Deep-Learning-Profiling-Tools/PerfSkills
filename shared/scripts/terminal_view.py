@@ -12,7 +12,7 @@ def _delta_summary(rows: list[dict] | None) -> dict | None:
     return {item["metric"]: item.get("pct") for item in values[:5]} or None
 
 
-def terminal_ncu(value: dict | None) -> dict | None:
+def terminal_ncu(value: dict | None, *, findings=False) -> dict | None:
     if not value or value.get("status") not in {None, "complete"}:
         return value
     disposition = value.get("disposition") or value.get("cache")
@@ -44,10 +44,13 @@ def terminal_ncu(value: dict | None) -> dict | None:
     }
     result = {
         "profile": disposition,
+        "target_changed": value.get("target_changed"),
+        "comparison_scope": value.get("comparison_scope"),
         "reason": reason_codes.get(value.get("reason"), value.get("reason")),
         "spent_s": value.get("spent_s"), "evidence_s": value.get("total_s"),
         "duration_ms": ((value.get("duration_ns") or 0) / 1e6
                         if value.get("duration_ns") is not None else None),
+        "duration_scope": "single-replayed-invocation",
         "metrics": value.get("metric_count"),
         "regs": nested(value, "launch", "registers_per_thread"),
         "occ_pct": nested(value, "occupancy", "achieved_pct"),
@@ -70,10 +73,26 @@ def terminal_ncu(value: dict | None) -> dict | None:
         "delta_parent_pct": _delta_summary(value.get("delta_parent")),
         "artifact": value.get("artifact"),
     }
+    if findings:
+        result["throughput_pct"] = value.get("throughput_pct") or None
+        result["cache_hit_pct"] = {k: memory[k] for k in ("l1_hit_pct", "l2_hit_pct") if memory.get(k) is not None} or None
+        if not any(v is not None for v in (result["roofline"] or {}).values()):
+            result.pop("roofline")
     return {key: item for key, item in result.items() if item is not None}
 
 
 def terminal_profile(value: dict, confirmation: bool = False) -> dict:
+    if value.get("acquisition"):
+        static = value.get("static") or {}
+        return {"id": value["id"], "status": value.get("status"),
+                "evidence": value["acquisition"],
+                "static": {"status": static.get("status"), "spent_s": static.get("spent_s"),
+                           "kernels": static.get("kernels", [])[:1],
+                           "delta_baseline": static.get("delta_baseline", [])[:1]},
+                "target": value.get("target"), "next": value.get("next"),
+                "activity": ({key: value.get(key) for key in ("scope", "launches", "copy_calls", "copy_bytes", "dropped", "errors")}
+                             if value.get("surface") == "pw-cupti" else None),
+                "ncu": terminal_ncu(value.get("ncu"))}
     if confirmation:
         keys = ("id", "status", "cache", "wall_pct")
         result = {key: value.get(key) for key in keys}

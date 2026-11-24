@@ -13,16 +13,16 @@ _NON_SYMBOLS = {"lambda", "instance", "operator"}
 
 
 def _head(name: str) -> str | None:
-    if any(marker in name for marker in LIBRARY_MARKERS):
+    # Template arguments may contain spaces, casts and names from other namespaces.
+    head = re.split(r"[<(]", name, maxsplit=1)[0].strip()
+    if any(marker in head for marker in LIBRARY_MARKERS):
         return None
-    head = name.split("(", 1)[0].strip()
     head = re.sub(
         r"^(?:void|int|float|double|long|unsigned|static|__global__|__device__)\s+",
         "",
         head,
     )
     token = re.split(r"\s+", head)[-1].rsplit("::", 1)[-1]
-    token = re.sub(r"<.*$", "", token)
     return token if _IDENTIFIER.match(token) else None
 
 

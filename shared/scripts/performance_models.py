@@ -12,6 +12,11 @@ def _number(value):
     return value if isinstance(value, (int, float)) and not isinstance(value, bool) else None
 
 
+def removal_ceiling(fraction):
+    """Amdahl ceiling if all of the measured fraction vanished."""
+    return 1.0 / (1.0 - fraction) if _number(fraction) is not None and 0 < fraction < 1 else None
+
+
 def _roofline_to_amdahl(profile: dict, hotspot_fraction: float | None,
                         mechanism: str | None) -> dict:
     roofline = profile.get("roofline") or {}
@@ -98,10 +103,10 @@ def analytical_models(profile: dict, hotspot_fraction: float | None = None,
             "inputs": {"dram_bytes": compact_number(traffic),
                        "duration_ns": compact_number(duration_ns)},
         })
-    if hotspot_fraction is not None and 0 < hotspot_fraction < 1:
+    if (ceiling := removal_ceiling(hotspot_fraction)) is not None:
         models.append({
             "name": "amdahl-removal-ceiling",
-            "value": compact_number(1.0 / (1.0 - hotspot_fraction)),
+            "value": compact_number(ceiling),
             "unit": "whole-ROI speedup if hotspot cost vanished",
             "inputs": {"hotspot_fraction": compact_number(hotspot_fraction)},
         })

@@ -16,6 +16,10 @@ def available(skill, forced=frozenset(), artifacts=frozenset(), tool_paths=None)
     tool_paths = tool_paths or {}
     if forced:
         return skill["skill"] in forced, ["explicit available set"]
+    if skill["skill"] in {"pw-hpctoolkit", "pw-gpa"}:
+        from native_profiler_probe import probe
+        result = probe(skill["skill"], {"profiling": {"tool_paths": tool_paths}})
+        return result["status"] == "available", [result.get("reason") or "native-capabilities-probed"]
     checks, ok = [], True
     spec = skill.get("availability", {})
     for command in spec.get("commands_all", []):
@@ -27,6 +31,10 @@ def available(skill, forced=frozenset(), artifacts=frozenset(), tool_paths=None)
     for name in spec.get("env_all", []):
         present = bool(os.environ.get(name))
         checks.append(f"{name}={'set' if present else 'unset'}")
+        ok &= present
+    if spec.get("env_any"):
+        present = any(bool(os.environ.get(name)) for name in spec["env_any"])
+        checks.append("any:" + ",".join(spec["env_any"]) + ("=set" if present else "=unset"))
         ok &= present
     artifact = spec.get("artifact")
     if artifact:
@@ -54,12 +62,22 @@ def select(registry, needs, forced=frozenset(), artifacts=frozenset(), tool_path
     needs = set(needs)
     candidates = []
     for skill in registry["skills"]:
-        capability = needs & set(skill["answers"])
+        answers = set(skill["answers"])
+        if not forced and skill["skill"] == "pw-cupti":
+            from cupti_pc import CAPABILITIES, probe as pc_probe
+            if needs & CAPABILITIES:
+                answers = set(pc_probe({})["capabilities"])
+            else:
+                answers -= CAPABILITIES
+        if not forced and skill["skill"] in {"pw-hpctoolkit", "pw-gpa"}:
+            from native_profiler_probe import probe
+            answers = set(probe(skill["skill"], {"profiling": {"tool_paths": tool_paths or {}}})["capabilities"])
+        capability = needs & answers
         present, checks = available(skill, forced, artifacts, tool_paths)
         learned, prior, budget = learned_adjustment(skill["skill"], policy_path)
         candidates.append({
             "skill": skill["skill"], "tool": skill["tool"], "covers": sorted(capability),
-            "missing": sorted(needs - set(skill["answers"])), "available": present,
+            "missing": sorted(needs - answers), "available": present,
             "checks": checks, "cost_score": skill["cost_rank"] + learned,
             "prior": prior, "learned_budget": budget, "full_loop": skill.get("full_loop", False),
         })

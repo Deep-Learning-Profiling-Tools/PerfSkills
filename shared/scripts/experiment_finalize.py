@@ -9,6 +9,7 @@ from experiment_report import refresh_brief
 from experiment_state import save_state
 from experiment_support import display, write
 from terminal_view import terminal_ncu
+from adaptive_policy import enabled
 
 
 def _eligible(state: dict, ids: list[str] | None) -> list[dict]:
@@ -29,14 +30,23 @@ def promote_existing(plan: dict, run: Path, state: dict,
     """Choose the best measured candidate without new execution or profiler replay."""
     prior = state.get("confirmed")
     if prior and (not ids or prior.get("id") in ids):
+        unknown = set(ids or []) - set(state.get("candidates", {}))
+        if unknown:
+            raise ValueError("unknown confirmation candidates: " + ",".join(sorted(unknown)))
+        compared = prior.get("compared_candidates") or [prior["id"]]
         return {"status": "cached", "winner": prior["id"],
                 "improvement": prior["improvement"], "evidence": prior.get("evidence"),
+                "verified": True, "campaign_complete": True, "next_action": "report-result",
+                "confirmed_candidates": compared,
+                "requested_comparison_performed": not (set(ids or []) - set(compared)),
                 "new_benchmark_runs": 0, "new_profiler_runs": 0}
     ranked = _eligible(state, ids)
     if not ranked:
         raise ValueError("no correct measured candidate is available to finalize")
     winner = ranked[0]
     result = winner["result"]
+    if enabled(plan):
+        raise ValueError("adaptive screening is provisional; use confirm for independent winner measurements")
     comparison = result["improvement"]
     threshold = plan["sampling"].get("practical_threshold", 1.02)
     kernel = (winner.get("profile") or {}).get("ncu") or {}

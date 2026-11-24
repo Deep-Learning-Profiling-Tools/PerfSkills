@@ -7,6 +7,7 @@ import shutil
 from pathlib import Path
 
 from experiment_support import REPO
+from adaptive_policy import configure, bounded_executions
 
 
 AUTO_KERNEL = "__PROFILEWEAVER_AUTO_KERNEL__"
@@ -19,8 +20,8 @@ def _tool(name: str) -> str:
     return str(Path(found).resolve())
 
 
-def tools() -> dict[str, str]:
-    return {name: _tool(name) for name in ("nvidia-smi", "nvcc", "nsys", "ncu")}
+def tools(overrides=None) -> dict[str, str]:
+    return {name: _tool((overrides or {}).get(name, name)) for name in ("nvidia-smi", "nvcc", "nsys", "ncu")}
 
 
 def substitute(value, facts: dict[str, str]):
@@ -112,7 +113,8 @@ def _final_stages(found: dict[str, str], roi: str, command: list[str],
 
 
 def experiment(manifest: dict, run_id: str, run: Path, baseline: Path,
-               found: dict[str, str], iterations: int, repairs: int) -> dict:
+               found: dict[str, str], iterations: int, repairs: int,
+               policy: str = "legacy") -> dict:
     execution = manifest["execution"]
     profiling = manifest.get("profiling") or {}
     source_symbols = [str(symbol) for symbol in manifest.get("source_symbols", [])]
@@ -122,6 +124,8 @@ def experiment(manifest: dict, run_id: str, run: Path, baseline: Path,
         "min_pairs": 5, "max_pairs": 7, "final_min_pairs": 7, "final_max_pairs": 11,
         "finalists": 2, "bootstrap_iterations": 1000, "practical_threshold": 1.02,
         "wall_gate": "advisory"}
+    if policy == "adaptive":
+        sampling = bounded_executions(configure(sampling))
     plan = {
         "version": 1, "run_id": run_id, "run_dir": str(run),
         "question": manifest.get("question") or "Optimize the largest measured GPU hotspot.",
@@ -151,12 +155,34 @@ def experiment(manifest: dict, run_id: str, run: Path, baseline: Path,
             "variant_kernel_regex": pattern, "launch_count": 1,
             "timeout_s": profiling.get("ncu_timeout_s", 1800),
             "fingerprint_inputs": manifest.get("kernel_fingerprint_inputs") or [command[0]]},
-        "kernel_timing": {"source": "ncu-duration", "detail": "filtered hotspot kernel"},
+        "kernel_timing": manifest.get("kernel_timing") or {"source": "ncu-duration", "detail": "filtered hotspot kernel"},
         "finalize": {"run_finalizer": True,
                      "stages": _final_stages(found, profiling.get("roi_name", "hpcperf:roi"),
                                               command, source_symbols)},
     }
     plan["kernel_profile"]["final_timeline_profile"] = "{run_dir}/profile.reprofile.json"
+    if policy == "adaptive" and profiling.get("adapters"):
+        plan["evidence_adapters"] = profiling["adapters"]
+    if manifest.get("selection_objective"):
+        plan["selection_objective"] = manifest["selection_objective"]
+    if policy == "adaptive":
+        plan["profiling"]["baseline_mode"] = "capability-first-v2"
+        # A legacy replay timeout must not become an automatic acquisition budget.
+        plan["kernel_profile"].pop("timeout_s", None)
+        if profiling.get("acquisition_budget_s") is not None:
+            plan["profiling"]["acquisition_budget_s"] = profiling["acquisition_budget_s"]
+        plan["profiling"]["skill_runtime"] = {"enabled": True, "decision_policy": "budgeted-lookahead-v3"} | (profiling.get("skill_runtime") or {})
+        plan["profiling"]["baseline_needs"] = profiling.get("baseline_needs", ["gpu-hotspot"])
+        plan["kernel_profile"]["baseline_acquisition"] = "on-demand"
+        plan["profiling"]["tool_paths"].update(profiling.get("tool_paths") or {})
+        if profiling.get("roi_name"):
+            plan["profiling"]["roi_name"] = profiling["roi_name"]
+        if profiling.get("providers"):
+            plan["profiling"]["providers"] = profiling["providers"]
+        if profiling.get("acquisition"):
+            plan["profiling"]["acquisition"] = profiling["acquisition"]
+        from compiler_cache import configure as configure_cache
+        plan = configure_cache(plan)
     return plan
 
 

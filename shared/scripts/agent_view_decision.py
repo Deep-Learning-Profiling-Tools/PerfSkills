@@ -68,7 +68,10 @@ def select_variant_profile(run: Path, report):
     for name in ["profile.variant.json", "profile.reprofile.json"]:
         if (run / name).exists():
             return run / name
-    candidates = sorted(p for p in run.glob("profile.*.json") if p.name != "profile.baseline.json")
+    # In particular, profile.ncu.baseline.json is never a candidate profile.
+    from agent_view_profile import load
+    candidates = sorted(p for p in run.glob("profile.*.json")
+                        if (load(p) or {}).get("phase") in {"variant", "reprofile"})
     return candidates[-1] if candidates else None
 
 

@@ -67,10 +67,12 @@ def _counter(agent="auto"):
             f"heuristic len/{HEURISTIC_CHARS_PER_TOKEN} - agent not detected; pass "
             f"--agent claude|codex for an exact count", False)
 
-def measure_skills(count, parse_loaded=None):
+def measure_skills(count, parse_loaded=None, *, inventory=True):
     """Per-skill definition cost: SKILL.md plus any references/ and assets/ it may pull in."""
     out = []
     for d in sorted(p for p in SKILLS.iterdir() if p.is_dir()):
+        if not inventory and not (parse_loaded or {}).get(d.name):
+            continue
         skill_md = d / "SKILL.md"
         if not skill_md.exists():
             continue
@@ -81,7 +83,7 @@ def measure_skills(count, parse_loaded=None):
             "skill_md_tokens": count(text),
             "on_demand": [],
         }
-        for sub in ("references", "assets"):
+        for sub in ("references", "assets") if inventory else ():
             for f in sorted((d / sub).glob("*")) if (d / sub).is_dir() else []:
                 if f.is_file():
                     t = f.read_text(errors="replace")

@@ -14,7 +14,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from source_scan import locate_symbol, repo_relative, write_slice
+from source_scan import locate_symbol, locate_symbols, repo_relative, write_slice
 
 
 _SUFFIX = re.compile(r"_(?:baseline|original|reference|naive|optimized?)$", re.I)
@@ -27,7 +27,8 @@ _DECLARATION_WORDS = (
     "__global__", "__device__", "__host__", "static", "inline", "extern", "void ",
     "int ", "long ", "double ", "float ", "bool ", "auto ", "struct ",
 )
-_CALL_ONLY = {"if", "for", "while", "switch", "catch", "sizeof", "return", "min", "max"}
+_CALL_ONLY = {"if", "for", "while", "switch", "catch", "sizeof", "return", "min", "max",
+              "defined", "__device__", "__global__", "__host__"}
 
 
 def _family(symbol: str) -> str:
@@ -112,7 +113,8 @@ def discover(symbol: str, hotspot_path: Path, files: list[Path], max_lines: int,
     except OSError:
         return []
     baseline_terms = {item.lower() for item in _KEYWORDS.findall("\n".join(lines))}
-    names = _candidate_names(lines, stem, symbol)
+    same_file_names = set(_candidate_names(lines, stem, symbol))
+    names = list(sorted(same_file_names))
     for path in files:
         if path.resolve() == hotspot_path.resolve():
             continue
@@ -123,11 +125,21 @@ def discover(symbol: str, hotspot_path: Path, files: list[Path], max_lines: int,
         for name in _declared_names(sibling_lines, symbol):
             if name not in names:
                 names.append(name)
+    batch = locate_symbols(names, files, min(max_lines, 180), context)
     found = []
     seen = set()
+    terms = set(stem.lower().split("_")) - {"run", "kernel", "device", "gpu", "cpu", "process", "compute"}
     for name in names:
-        item = locate_symbol(name, files, min(max_lines, 180), context)
-        if not item:
+        item = batch.get(name)
+        if not item or not item["method"].startswith("function"):
+            continue
+        declaration = item["lines"][item["match"]].split("//", 1)[0]
+        if not re.search(rf"\b{re.escape(name)}\s*\(", declaration):
+            continue
+        body = "\n".join(item["lines"][item["match"]:item["end"]])
+        launches = re.findall(r"\b([A-Za-z_]\w*)\s*<<<", body)
+        related_launch = any(terms.intersection(launch.lower().split("_")) for launch in launches)
+        if name not in same_file_names and not name.startswith(stem + "_") and not related_launch:
             continue
         key = (name, item["path"].resolve())
         if key in seen or (item["path"].resolve() == hotspot_path.resolve() and name == symbol):

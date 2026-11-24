@@ -160,13 +160,14 @@ def timeline_shape(profile, details):
         labels.append("mixed-timeline")
     return {
         "labels": labels,
+        "timing_basis": "process" if (profile.get("scope") or {}).get("policy") == "whole-process-gpu-activities" else "roi",
         "gpu_busy_pct": round(busy / wall * 100, 2) if wall and isinstance(busy, (int, float)) else None,
         "copy_pct": round(copy / wall * 100, 2) if wall else None,
         "setup_copy_s": pre_copy_s,
         "setup_copy_bytes": pre_copy_bytes,
         "setup_copy_pct_of_roi": round(pre_copy_s / wall * 100, 2) if wall else None,
         "kernel_launches": launch_count,
-        "top_launch": (details.get("top_launches") or [None])[0],
+        "top_launch": (details.get("top_launches") or [None])[0] or (top.get("metrics") or {}).get("first_launch"),
         "synchronizations": summary.get("synchronizations"),
         "synchronization_time_s": summary.get("synchronization_time_s"),
         "copy_calls": summary.get("copy_calls"),

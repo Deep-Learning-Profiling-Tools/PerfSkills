@@ -9,6 +9,35 @@ from pathlib import Path
 from source_scan import repo_relative, write_slice
 
 
+_LINE_CACHE: dict[Path, list[str]] = {}
+_SITE_INDEX: dict[tuple[Path, ...], dict[str, list[tuple[Path, list[str], int]]]] = {}
+
+
+def _source_lines(path: Path) -> list[str] | None:
+    if path not in _LINE_CACHE:
+        try:
+            _LINE_CACHE[path] = path.read_text(errors="replace").splitlines()
+        except OSError:
+            return None
+    return _LINE_CACHE[path]
+
+
+def _site_index(files: list[Path]) -> dict[str, list[tuple[Path, list[str], int]]]:
+    key = tuple(files)
+    if key in _SITE_INDEX:
+        return _SITE_INDEX[key]
+    index: dict[str, list[tuple[Path, list[str], int]]] = {}
+    for path in files:
+        lines = _source_lines(path)
+        if lines is None:
+            continue
+        for number, line in enumerate(lines):
+            for token in set(re.findall(r"\b[A-Za-z_]\w*\b", line)):
+                index.setdefault(token, []).append((path, lines, number))
+    _SITE_INDEX[key] = index
+    return index
+
+
 def code_only(text: str) -> str:
     """Remove comments and literals before applying lexical source scans."""
     text = re.sub(r"/\*.*?\*/", " ", text, flags=re.S)
@@ -33,27 +62,22 @@ def data_sites(symbol: str, files: list[Path], context: int = 5) -> list[dict]:
     )
 
     candidates = []
-    for path in files:
-        try:
-            lines = path.read_text(errors="replace").splitlines()
-        except OSError:
-            continue
-        for index, line in enumerate(lines):
-            clean = code_only(line).strip()
-            kind, score = None, 0
-            if declaration.search(clean):
-                kind, score = "declaration", 6 if path.suffix in {".h", ".hpp", ".cuh"} else 4
-            if writer.search(clean):
-                kind, score = "writer", max(score, 5)
-                nearby = "\n".join(lines[max(0, index - context):index + context + 1])
-                score += len(re.findall(r"\b(?:for|while|if)\s*\(", code_only(nearby)))
-            if transfer.search(clean):
-                kind = "transfer-or-allocation"
-                operation_scores = ((r"Memcpy", 12), (r"Malloc", 10), (r"Memset", 9))
-                score = max(score, next((value for name, value in operation_scores
-                                         if re.search(name, clean, re.I)), 8))
-            if not kind:
-                continue
+    for path, lines, index in _site_index(files).get(leaf, []):
+        line = lines[index]
+        clean = code_only(line).strip()
+        kind, score = None, 0
+        if declaration.search(clean):
+            kind, score = "declaration", 6 if path.suffix in {".h", ".hpp", ".cuh"} else 4
+        if writer.search(clean):
+            kind, score = "writer", max(score, 5)
+            nearby = "\n".join(lines[max(0, index - context):index + context + 1])
+            score += len(re.findall(r"\b(?:for|while|if)\s*\(", code_only(nearby)))
+        if transfer.search(clean):
+            kind = "transfer-or-allocation"
+            operation_scores = ((r"Memcpy", 12), (r"Malloc", 10), (r"Memset", 9))
+            score = max(score, next((value for name, value in operation_scores
+                                     if re.search(name, clean, re.I)), 8))
+        if kind:
             start, end = max(0, index - context), min(len(lines), index + context + 1)
             candidates.append({
                 "path": path, "match": index, "start": start, "end": end,

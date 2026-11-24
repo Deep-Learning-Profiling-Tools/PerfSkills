@@ -12,6 +12,7 @@ from pathlib import Path
 from campaign_io import (REPO, campaign_fingerprint, load, resolve, validate_plan, write)
 from campaign_run import evaluate_candidate, run_build
 from campaign_select import final_confirmation, screening_decision
+from acquisition_cost import campaign_cost
 
 
 def main():
@@ -37,7 +38,9 @@ def main():
         return 0
     started = time.perf_counter()
     baseline, candidates = plan["baseline"], plan["candidates"]
-    if len(candidates) != 1:
+    adaptive_final = (plan.get("phase") == "final-only" and
+                      plan["sampling"].get("mode") == "adaptive" and 1 <= len(candidates) <= 2)
+    if len(candidates) != 1 and not adaptive_final:
         raise ValueError("campaign plans must contain exactly one candidate")
     try:
         phase = plan.get("phase", "confirm")
@@ -63,8 +66,10 @@ def main():
                   "metric": plan["metric"],
                   "sampling": plan["sampling"], "builds": builds, "candidates": results,
                   "final": final}
-        if phase == "screen" and any(item["pairs"] < 2 for item in results):
-            result["confidence"] = "screening-only-single-pass"
+        result["cost"] = campaign_cost(builds, results, final, phase, result["elapsed_s"])
+        if phase == "screen" and (plan["sampling"].get("mode") == "adaptive" or
+                                   any(item["pairs"] < 2 for item in results)):
+            result["confidence"] = "screening-only"
         write(result_path, result)
         iterations = []
         for index, item in enumerate(results, 1):
@@ -81,9 +86,11 @@ def main():
         write(run_dir / "iterations.json", iterations)
         winner = next(item for item in results if item["id"] == final["winner"])
         confidence = result.get("confidence", "paired-bootstrap")
+        interval = final["baseline_vs_winner"].get("ci95")
+        ci_text = f"[{interval[0]:.3f},{interval[1]:.3f}]" if interval else "not-established"
         brief = (f"ProfileWeaver campaign {phase}; confidence={confidence}; candidates={len(results)}; winner={final['winner']}; "
                  f"improvement={final['baseline_vs_winner']['point']:.3f}x "
-                 f"CI=[{final['baseline_vs_winner']['ci95'][0]:.3f},{final['baseline_vs_winner']['ci95'][1]:.3f}]; "
+                 f"CI={ci_text}; "
                  f"pairs={final['pairs']} stop={final['stop']}; correctness="
                  f"{'PASS' if final['gates'].get('correctness') else 'FAIL'}; "
                  f"mechanism={winner.get('mechanism')}; full={result_path}\n")

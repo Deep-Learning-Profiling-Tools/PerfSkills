@@ -17,8 +17,10 @@ from brief_facts import (
     timeline_shape,
 )
 from brief_render import render
+from brief_source_refs import source_references
 from kernel_evidence import agent_ncu, attach_advice
 from terminal_view import terminal_ncu
+from brief_current import current_evidence
 
 PROTOCOL = "profileweaver.agent-brief/v1"
 DEFAULT_MAX_TOKENS = 320
@@ -34,6 +36,8 @@ def build(run: Path, phase="auto", max_tokens=DEFAULT_MAX_TOKENS):
     targets_doc = load(run / "source-targets.json", {})
     targets = targets_doc.get("targets") or []
     state = load(run / "experiment-state.json", {})
+    application = load(run / "application-facts.json", {}).get("facts", [])
+    baseline_quality = load(run / "baseline-timing.json", {}).get("qualification", {})
     iterations = load(run / "iterations.json", [])
     campaign = load(run / "campaign-result.json", {})
     state_iterations = []
@@ -97,6 +101,8 @@ def build(run: Path, phase="auto", max_tokens=DEFAULT_MAX_TOKENS):
     # opportunity rankings stay backend-only so they cannot anchor the agent.
     frontier = []
     phase = choose_phase(phase, report, iterations, harness)
+    if state.get("selected"):
+        phase = "final"
     hotspots = profile.get("hotspots") or []
     top = hotspots[0] if hotspots else {}
     totals = profile.get("totals") or {}
@@ -116,37 +122,23 @@ def build(run: Path, phase="auto", max_tokens=DEFAULT_MAX_TOKENS):
             best = {"iteration": item.get("iteration"), "value": value,
                     "unit": primary.get("unit", "s" if roi else None),
                     "improvement": primary.get("improvement", roi.get("speedup"))}
-    source_refs = []
-    for target in baseline_targets:
-        src = target.get("source") or {}
-        slc = target.get("slice") or {}
-        source_refs.append({"id": target.get("id"), "path": src.get("path"),
-                            "lines": [src.get("start_line"), src.get("end_line")],
-                            "slice": slc.get("path"),
-                            "relation": (target.get("dependency") or {}).get("relation", "hotspot"),
-                            "parent": (target.get("dependency") or {}).get("parent"), "scope": (target.get("resolution") or {}).get("scope"),
-                            "confidence": (target.get("resolution") or {}).get("confidence")})
-    variant_refs = []
-    for target in variant_targets:
-        src = target.get("source") or {}
-        variant_refs.append({"id": target.get("id"), "symbol": target.get("symbol"),
-                             "path": src.get("path"),
-                             "lines": [src.get("start_line"), src.get("end_line")],
-                             "slice": (target.get("slice") or {}).get("path"),
-                             "relation": "existing-variant",
-                             "parent": (target.get("dependency") or {}).get("parent"), "scope": (target.get("resolution") or {}).get("scope")})
+    source_refs, variant_refs = source_references(baseline_targets, variant_targets)
     action = {
         "optimize": "use the measured evidence and named source slices to design a candidate",
         "iterate": "choose and test the highest-value candidate supported by the evidence",
         "repair": f"repair failed stage {harness.get('failed_stage')}",
         "final": "deliver only if every trust gate passes; otherwise repair the failed gate",
     }[phase]
+    if state.get("selected"):
+        action = "report measured result; no additional benchmark runs; statistical significance is not established"
     machine = {
         "protocol": PROTOCOL,
         "run_id": run.name,
         "phase": phase,
         "action": action,
         "measurement": {
+            "skill_runtime": state.get("skill_runtime"),
+            "baseline_qualification": baseline_quality,
             "roi_ms": fmt_ms(totals.get("wall_time_s")),
             "gpu_busy_ms": fmt_ms(totals.get("gpu_busy_s")),
             "top": {"name": top.get("name"), "ms": fmt_ms(top.get("self_time_s")),
@@ -156,6 +148,7 @@ def build(run: Path, phase="auto", max_tokens=DEFAULT_MAX_TOKENS):
             "kernel_diagnostics": agent_ncu(ncu),
         },
         "source": {"targets": source_refs, "variants": variant_refs, "facts": features, "signals": timeline_signals,
+                   "application_reported": application,
                    "scanned_emitted_targets": scanned_targets,
                    "policy": "read only listed slices; resolve one named dependency at a time; agent chooses edits"},
         "campaign": {"iterations": len(iterations), "best": best,
@@ -175,10 +168,29 @@ def build(run: Path, phase="auto", max_tokens=DEFAULT_MAX_TOKENS):
             "agent_view": "agent-view.json" if (run / "agent-view.json").exists() else None,
         },
     }
+    acquisition = None
+    current = None
+    plan = load(run / "experiment-plan.json", {})
+    if (plan.get("sampling") or {}).get("mode") == "adaptive":
+        latest_id = (last_batch.get("candidates") or [None])[-1]
+        latest_profile = ((state.get("candidates") or {}).get(latest_id) or {}).get("profile") or {}
+        acquisition = latest_profile.get("acquisition") or {"tool": "baseline-anchor", "reason": "initial-discovery"}
+        machine["measurement"]["acquisition"] = acquisition
+        machine["measurement"]["baseline_anchor"] = True
+        current = current_evidence(run, state)
+        machine["measurement"]["current"] = current
+        from phase_opportunity import current as phase_opportunity
+        snapshot = (state.get("best") or {}).get("id") or "baseline"
+        opportunity = phase_opportunity(run, plan, state, snapshot)
+        if snapshot != "baseline" and not opportunity:
+            opportunity = phase_opportunity(run, plan, state)
+        if opportunity:
+            shape["phase_opportunity"] = opportunity
 
     text, context = render(
         run, phase, action, request, fingerprint, totals, top, shape, source_refs,
         frontier, history, iterations, best, features, ncu, latest, failed_gates,
-        variant_refs, max_tokens, DEFAULT_MAX_TOKENS, DEFAULT_NCU_MAX_TOKENS)
+        variant_refs, max_tokens, DEFAULT_MAX_TOKENS, DEFAULT_NCU_MAX_TOKENS, acquisition, current,
+        application, baseline_quality)
     machine["context"] = context
     return machine, text

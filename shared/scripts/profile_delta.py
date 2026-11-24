@@ -35,7 +35,9 @@ def profile_signature(plan: dict, workspace: Path, values: dict[str, str]) -> st
             dependencies.append({"path": str(path),
                                  "sha256": sha256(path) if path.is_file() else None})
     material = {
+        "normalization_revision": 2,
         "contract": plan["iteration_profile"],
+        "kernel_contract": plan.get("kernel_profile"),
         "source": source_state(workspace, plan["source"]["fingerprint_globs"]),
         "baseline_profile_sha256": sha256(Path(values["baseline_profile"])),
         "dependencies": dependencies,
@@ -93,6 +95,11 @@ def profile_capsule(plan: dict, candidate_id: str, baseline: dict, variant: dict
                     baseline_kernel_profile: dict | None = None,
                     parent_kernel_profile: dict | None = None) -> dict:
     remaining = diff.get("remaining_leverage") or {}
+    # A counter-only profile identifies a real captured symbol, but carries no
+    # current application timing with which to rank remaining time leverage.
+    if not remaining.get("name"):
+        captured = ((variant.get("kernel_diagnostics") or {}).get("kernels") or [{}])[0]
+        remaining = {"name": captured.get("name"), "pct_of_variant_wall": None}
     source_target = next((item for item in sources.get("targets", [])
                           if item.get("hotspot") == remaining.get("name")), None)
     source = (source_target or {}).get("source") or {}
@@ -112,14 +119,22 @@ def profile_capsule(plan: dict, candidate_id: str, baseline: dict, variant: dict
         ncu["delta_baseline"] = ncu_delta(baseline_kernel_profile, ncu)
         ncu["delta"] = ncu["delta_baseline"]
         ncu["delta_parent"] = ncu_delta(parent_kernel_profile or baseline_kernel_profile, ncu)
+    changed_symbol = (ncu and baseline_kernel_profile and ncu.get("kernel") and
+                      baseline_kernel_profile.get("kernel") and ncu["kernel"] != baseline_kernel_profile["kernel"])
+    if ncu and (plan.get("adaptive_target_changed") or changed_symbol):
+        ncu = dict(ncu) | {"target_changed": True, "delta_baseline": None, "delta": None,
+                          "delta_parent": None, "comparison_scope": "different-symbol-counters-not-diffed"}
     result = {
         "id": candidate_id, "status": "complete", "cache": cache,
+        "scope": variant.get("scope"),
         "wall_pct": ((diff.get("headline") or {}).get("wall_s") or {}).get("change_pct"),
         "gpu_pct": ((diff.get("headline") or {}).get("gpu_busy_s") or {}).get("change_pct"),
         "target": target_delta(plan, baseline, variant), "gain": _movement(diff, "decreases"),
         "regression": _movement(diff, "increases"), "ncu": ncu,
         "next": next_target or None, "artifact": display(artifact),
     }
+    if plan.get("adaptive_target_changed"):
+        result["target"] = {"comparison_scope": "different-kernel-symbols", "delta": None}
     return {key: value for key, value in result.items() if value is not None}
 
 

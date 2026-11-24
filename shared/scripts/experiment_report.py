@@ -13,6 +13,9 @@ def refresh_brief(plan: dict, run: Path, state: dict) -> None:
     """Keep one state-aware brief; campaign state is the durable history."""
     machine, text = build(run)
     (run / "agent-brief.json").write_text(json.dumps(machine, indent=2) + "\n")
+    from selection_objective import kernel_mode, summary
+    if kernel_mode(state):
+        text = "OBJECTIVE " + json.dumps(summary(state), separators=(",", ":")) + "; leader=" + str((state.get("best") or {}).get("id", "baseline")) + "\n" + text
     (run / "agent-brief.txt").write_text(text)
     stale = run / "experiment-brief.txt"
     if stale.exists():

@@ -5,167 +5,199 @@ description: Route an HPC performance question to the cheapest capable profiler,
 
 # ProfileWeaver
 
-Return a rewrite that passes correctness, significance, mechanism, collateral-cost,
-attribution, and reproducibility gates. Never invent measurements, supported flags, architecture,
-or causal explanations. Unknown values remain `null`.
+Find a correct improvement from measured evidence. The agent chooses and edits candidates;
+the controller collects evidence and applies timing, correctness and attribution gates.
+Unknown measurements stay null. A profiler cannot prove mechanisms it does not observe.
 
-## One public entry point
+## Routine optimization
 
-For an optimization journey, invoke only:
+Run commands from the repository root through this public entry point:
 
 ```bash
 python3 shared/scripts/experiment.py start --workload <directory> --iterations 10 --repairs 7
-python3 shared/scripts/experiment.py runs/<id>/experiment-plan.json prepare-batch \
-  --candidate a:baseline:<mechanism>
-# edit only the returned candidate workspace and source slices
+python3 shared/scripts/experiment.py runs/<id>/experiment-plan.json prepare-batch --candidate a:baseline:<mechanism>
+# edit the returned candidate source workspace
 python3 shared/scripts/experiment.py runs/<id>/experiment-plan.json evaluate a
-# after the verdict, use PARENT=current to inherit the measured best candidate
-python3 shared/scripts/experiment.py runs/<id>/experiment-plan.json prepare-batch \
-  --candidate b:current:<next-mechanism>
-python3 shared/scripts/experiment.py runs/<id>/experiment-plan.json confirm a
-python3 shared/scripts/experiment.py runs/<id>/experiment-plan.json status
+# use :current: to inherit the measured leader, or explicitly name another parent
 ```
 
-`start` discovers and caches compiler, GPU, NSYS, NCU version and sections; creates both internal
-contracts; copies and builds the baseline; checks correctness; runs baseline NSYS; selects the
-measured kernel; runs baseline NCU; reduces both profiles; and emits bounded source slices. Never
-author or edit `experiment-plan.json`, `preflight-plan.json`, or framework Python during a journey.
+Wait on running command sessions for up to 60 seconds per poll; avoid repeated one-second polls.
 
-The optimizer may read only the returned `agent-brief.txt`, explicitly named profile drill-downs,
-and emitted source slices. It may edit only source under a returned candidate workspace. Do not
-read README files, schemas, controller state, backend Python, raw profiler output, full logs, or
-other benchmark files. Do not open child `pw-*` skill files; the controller owns their mechanics.
-When `source-targets.json` exposes `existing-variant` slices, treat them as bounded search-space
-references: compare their structural mechanism with the measured baseline before inventing a
-new local or parameter change. They are source context, not performance evidence; correctness
-and the declared metric still decide.
-GPA-style symptom families and Roofline/Amdahl values in the brief are descriptive measurements.
-The agent packet contains no generated mechanism labels, action hints, priorities, or opportunity
-rankings. Keep workload names only in the required kernel and source-slice identifiers; do not
-turn a field name or a benchmark-specific algorithm into a framework hypothesis. Descriptions
-passed with `prepare` are agent-provided audit text, not generated advice.
-A controller failure is reported from its compact error plus named raw
-artifact; it is not repaired by changing the framework during the optimization task.
+A manifest's `selection_objective` can declare a kernel-only goal. Override it with
+`--objective kernel --kernel REGEX`. This mode compares activity sums from one provider/scope,
+labels the profiled basis and retains unprofiled application collateral. Goal corrections use
+`objective --scope kernel --kernel REGEX`. Renames use `prepare --target-kernel REGEX`.
+Read the returned objective and baseline before choosing an edit. [Selection and inspection](references/skill-runtime.md).
 
-Use `inspect --section <name>` only when the compact profile names missing evidence that can
-change the next decision. For NCU, add `--candidate <id> --group <name>`. The controller invokes
-routing, profilers, reducers, source location, sampling, correctness, caching, delta generation,
-confirmation, reporting, and learning internally. Do not invoke `route.py`, child capture
-scripts, `campaign.py`, `brief.py`, `agent_view.py`, or `finalize.py` during a routine journey.
+Read the returned brief and inline candidate evidence. Resolve one connected source dependency
+at a time, using the compact index and bounded source pages:
 
-For long-running workloads, a manifest may set `sampling.mode` to `winner-confirmation`, with
-`screen_min_pairs`/`screen_max_pairs` normally set to `1` and `profiling.cadence` set to
-`every-candidate`. Screening then performs one paired baseline/candidate execution and captures an
-NSYS timeline delta per iteration while deferring candidate NCU replay. Once the iteration budget
-is exhausted, the controller runs the final multi-pair campaign and full profiling for the best
-measured candidate only. Standard workloads retain the five-pair screening default.
+```bash
+python3 shared/scripts/experiment.py runs/<id>/experiment-plan.json inspect --section source
+python3 shared/scripts/experiment.py runs/<id>/experiment-plan.json inspect --section source --target target-01
+# --candidate ID selects that snapshot; --offset N retrieves the next page
+```
 
-## Profiler selection
+Do not dump the complete source-targets JSON or read all sibling implementations in advance.
+`existing-variant` slices are structural references, not measurements. Follow named caller,
+callee, producer, transfer and consumer edges when needed; a coherent candidate may span files.
+Reuse source content IDs with `--known ID`. Packets include changed lines and build errors.
+Benchmark inspection is compact and paginated. Use `--candidate ID --group detail` when needed.
+Literal disabled-condition observations describe source, not execution or performance. Account
+for deliberately disabled paths when interpreting later evidence; the controller never decides
+that they must be enabled or supplies a benchmark recipe.
+Check the application's reported configuration against conditional source paths before editing.
+An improvement to an inactive branch cannot explain a measured gain. `inspect --section harness`
+exposes the command, metric, reported categorical settings and baseline qualification.
 
-Declare the question as capability tags under `profiling.discovery_needs` and
-`profiling.diagnostic_needs`. `init` selects the cheapest available child for each phase and
-writes `profiler-routing.json`.
+During an optimization journey, edit only returned candidate sources. Do not read framework
+Python, schemas, plans/state, raw traces, full logs, child skill files or unrelated source.
+Do not author orchestration/reporting scripts or repair framework code during the journey.
+Use the controller's named inspections and compact failure diagnostics. Harness maintenance is
+a separate task, not a workaround inside a failing optimization run.
 
-- `pw-perf`: CPU hotspots, hardware counters, cache, branches, vectorization.
-- `pw-nsight-systems`: GPU/CPU timeline, absolute kernel cost, launches, transfers,
-  synchronization, overlap, NVTX phases.
-- `pw-nsight-compute`: internals of one already measured NVIDIA kernel: stalls, scheduler,
-  registers, occupancy limiters, memory transactions, cache, instructions, throughput, roofline.
-- `pw-hpctoolkit`: calling context and source attribution across CPU/GPU work.
-- `pw-gpa`: instruction/source-line stall attribution and GPA optimization advice on supported
-  workloads.
-- `pw-gvprof`: pre-captured GPU value redundancy; pair with measured time.
-- `pw-drgpum`: pre-captured GPU memory liveness and capacity, never runtime.
+## Connect the cost to the code
 
-A CUDA executable does not imply NCU. Use NCU only when an expensive kernel is known and its
-internal mechanism is still unresolved. A blocked or partial route is evidence; do not silently
-substitute another tool.
+Compare removing repeated work or traffic with improving its execution. Follow bounded
+producer, transfer and consumer slices: setup, temporary arrays, repeated preparation and
+neighboring outputs may explain more cost than a local instruction change. Existing alternatives
+are useful comparisons, never prescribed winners. Source reuse and dependence ordering must
+justify a proposed fusion, precomputation or representation change.
+A `PHASE` line compares related work within its measured scope. Inspect the named phase
+source first when an application timer or existing timeline answers the question. GPU-idle
+time alone leaves its cause open. Request the named host timeline capabilities when needed,
+and use kernel counters for a separate question about execution within a hotspot.
+Before using an unfamiliar API from a prebuilt dependency, use
+`inspect --section harness --group link --candidate ID --target SYMBOL` to check its
+definition in the linked libraries. The response names the build snapshot and include binding.
+After a gain, use current timing to identify the remaining cost. After a regression, compare the
+parent and the retained leader; an improvement over a slow parent can still lose to baseline.
+A short plateau does not imply that the remaining transformations have no value.
 
-## GPU evidence ladder
+## Spend evidence where it changes a decision
 
-1. Run cached preflight once for compiler, device, profiler capability, permissions, build,
-   launch, and oracle. Reuse it.
-2. Use one baseline NSYS or equivalent timing capture to rank kernels and expose timeline costs.
-   Use NVTX to delimit a stable phase when the application already provides ranges.
-3. Rank unprofiled candidates with the declared metric. Prefer a high-resolution CUDA-event or
-   application ROI time emitted on stdout for a kernel objective; retain whole-process time as a
-   collateral measurement. NCU replay duration is evidence, never benchmark time.
-4. Capture baseline NCU `section=all` for the one bounded kernel. The controller reduces the
-   full counter table into a small hierarchical diagnosis.
-5. Every correct candidate in standard mode receives an NCU disposition and parent- plus
-   baseline-relative delta. In `winner-confirmation` screening with `every-candidate` cadence,
-   return paired timing and NSYS timeline deltas while deferring candidate NCU; the selected
-   winner receives full NCU evidence during final confirmation. A changed kernel is captured; an identical kernel fingerprint explicitly reuses
-   evidence. When cached preflight supplied verified section names, candidate replay uses the
-   section tier for the current diagnosis. Otherwise it falls back to full evidence rather than
-   guessing.
-6. Reuse the accepted winner's paired benchmark and candidate NCU delta. Use `confirm --fresh`
-   only when attribution or collateral evidence is unresolved.
+Start with the existing application/CUDA-event timer, correctness and static binary resources.
+New adaptive baselines choose a capable activity/context provider; CUPTI can attribute existing
+NVTX ranges. Missing ranges, record loss, conflicting injection or unsupported scope require a
+capable fallback. Baseline NCU is on demand. Existing saved plans and `start --policy legacy`
+retain their contracts. Never insert timer calls or change numerical precision to claim timing.
+Baseline correctness/timing is emitted immediately in live progress, before profiling finishes.
+Adaptive baseline captures have a deadline derived from measured process time (30 seconds minimum,
+three times baseline wall time, capped by the application timeout); `baseline_capture_timeout_s`
+can override it. A timed-out capture fails explicitly with retained logs. Do not report a stalled
+capture as normal profiling overhead. Declared `profiling.tool_paths` bind preflight, build and capture.
 
-Use `every-candidate` NSYS only when timeline deltas can change the next decision, such as
-transfers, launches, overlap, or synchronization. Keep candidate NCU deferred in long-running
-screening. Do not run NCU on every kernel. Use `kernel_profile.nvtx_include` only with a verified
-existing NVTX range.
+New adaptive screens compare editing now with buying a missing observation first. They price
+provider wall time and compact evidence tokens against recent correct incumbent gains and edit
+costs. When the packet says `compare-source-hypotheses`, compare two plausible transformations
+using existing evidence (including a producer or consumer when relevant) before buying a replay.
+After a regression, compare a local change with a connected producer/consumer hypothesis using
+the source handles. Useful late gains can follow plateaus; keep a fixed requested iteration budget. Name the missing observable before buying another replay. Recent baseline
+counters remain useful when that baseline is unchanged; a failed candidate does not invalidate them.
+Explicit questions and changed execution identities can still justify a new capable provider.
 
-## Evidence hierarchy
+Acquisition shares one deadline across routing, setup, capture, export and reduction; it is
+based on baseline wall time and the application limit. `profiling.acquisition_budget_s` overrides
+it. Providers do not receive fresh budgets at each stage. Targeted NCU uses preflight-verified
+sections; full NCU is explicit. Automatic optional providers need positive capability probes.
+Completed measurements are checkpointed before diagnostics, allowing unchanged-input recovery
+without more benchmark runs. Failed profiling leaves attribution unresolved. See the engineering
+reference for deadline details; ordinary optimization needs only the returned verdict.
 
-Reason from broad cost to narrow cause:
+| Missing fact | Example request or capable surface |
+|---|---|
+| Timed kernels, copies, existing ROI | CUPTI activity; NSYS for richer context |
+| Host waits, launch gaps, overlap, MPI phases | `evaluate ID --need sync` / NSYS |
+| Literal sampled stalls and PCs | `evaluate ID --need gpu-pc --need instruction-stalls` |
+| Occupancy for a launch-shape decision | `evidence ID --need gpu-occupancy` / targeted NCU |
+| Cache traffic and memory throughput | `evidence ID --need memory-bandwidth` / targeted NCU |
+| Roofline bound for a named kernel | `evidence ID --need gpu-roofline` / targeted NCU Roofline section |
+| Calling context | `evaluate ID --need call-context` / probed HPCToolkit |
+| Causal stall attribution or redundant values | GPA or value adapter only with positive compatibility/artifact evidence |
 
-1. **Application:** end-to-end/ROI time, GPU busy time, transfers, launches, synchronization.
-2. **Kernel:** duration and frequency; grid/block shape; absolute DRAM bytes.
-3. **Function/data:** bounded hotspot, callees, accessed objects, declarations, builders/writers,
-   and transfers selected by the dependency locator.
-4. **Instruction:** leading warp stalls, issue eligibility, instruction mix, branch efficiency,
-   source/SASS evidence, cache/sector waste.
+Repeat `--need` for required capabilities. `--provider` explicitly requests a capable provider;
+`--evidence timeline|kernel` requests a broader surface on `evaluate` or profile-only `evidence`.
+`gpu-kernel-time` aliases `gpu-hotspot`. `--ncu ID` forces full counters.
+CUPTI PC sampling is not GPA causal advice. Static registers are not achieved occupancy.
+Timing profiles cannot establish cache misses. An unavailable provider stays explicit.
+The controller compares capability coverage first, measured acquisition cost next, configured
+priors when uncalibrated. Roofline/Amdahl are historical opportunity bounds, not predictions.
+Final winner evidence still uses the configured independent profiling gates.
 
-The diagnostic reducer jointly evaluates register footprint and spills, achieved/theoretical
-occupancy and resource limiters, active/eligible/issued warps, issue activity, stalls, SM/DRAM/
-L1/L2 throughput, hit rates, bytes per sector, DRAM bytes, instructions, branches, shared-memory
-conflicts, and profiler rules. Missing metrics stay absent. Read one named metric group only when
-the compact hierarchy cannot distinguish the next action.
+New adaptive plans learn profiler recipes within an observed environment binding. Actual capability
+coverage, new evidence and wall cost revise provider/question preferences; repeated failures roll
+back a recipe. Recent ancestor evidence is reused. Timing-only evidence does not resolve kernel
+internals. The compact packet names learned decisions; full experience stays backend-only.
+Repeated validated invocation parameters can be reused with `evidence ID --recipe`; environment
+drift invalidates the binding and reroutes the question. Request only evidence needed for a decision.
+This learning never authors application edits or adds benchmark repetitions. Existing plans retain
+their saved policy. When a measured fact motivates an edit, pass its `cite` ID with
+`prepare-batch --because ID`. Optionally describe a competing next edit with
+`--consider 'capability=rewrite'`. Exact iteration counts stay fixed. [Skill runtime](references/skill-runtime.md).
 
-Analytical models provide bounds and priorities, never claimed speedups. Apply the GPA-style
-symptom family first, then measured Roofline resource classification, a kernel opportunity
-ceiling, and Amdahl translation through the timing profiler's hotspot fraction. Also consider
-memory-transaction efficiency, traffic rate, latency hiding, resource feasibility, transfer
-bounds, and static work/search-depth or footprint changes. The candidate still has to win
-measurement and correctness gates.
+For a new question about an already measured snapshot, use
+`experiment.py <plan> evidence current --need <capability>` (or name a candidate or `baseline`).
+This collects profiling evidence without another benchmark evaluation. Check existing evidence
+first. Automatic plateau diagnostics target the retained measured leader, with its snapshot
+named explicitly, rather than spending the capture on the latest regression.
 
-## Optimization search
+Each evaluation returns at most 640 tokens of candidate evidence. Request only a named missing
+group (`inspect --section evidence --candidate ID --group timing|resources|stalls|contexts|locations|findings`).
+Packets preserve current timing, changed regions and a source-inspection handle. Reference
+counters name their own snapshot. `evaluation_passed` means the measurement completed;
+`candidate_result` states improvement, regression or unresolved ranking. Screen `accepted`
+requires an observed improvement under the bounded policy. The full artifact remains on disk.
+Never attach baseline timings to current counters. Application objectives rank unprofiled
+measurements. Explicit kernel objectives report the consistent provider and profiled timing basis. Distinguish application ROI, lookup-only time and process wall.
 
-Work on the largest measured remaining cost. Prefer structural mechanisms before launch-parameter
-tuning: remove work or traffic, change a search/index, transform data layout/order, preserve data
-residency, group similar work, fuse/fission phases, or precompute invariants. Then consider
-coalescing, reuse, instruction mix, live ranges, block shape, and occupancy.
+## Measurement and stopping
 
-Treat the brief's GPA-style symptom family, counters, deltas, and source/dataflow slices as
-descriptive evidence. ProfileWeaver does not emit a candidate list, mechanism label, action hint,
-priority, or optimization opportunity ranking. Choose and justify the candidate directly from the
-measured facts; prove specific data reuse, dependency, and correctness conditions in the emitted
-slices.
-If the brief reports a `VARIANTS` line, read only those named sibling slices. A promising sibling
-may be in the measured file or another declared source file; it can be adapted as one coherent
-candidate, including linked caller, producer, transfer, data, and kernel edits, so the search can
-reach existing structural alternatives without browsing the whole benchmark. The compact
-`DEPENDENCY FRONTIER` names target IDs and parent edges; use `source-targets.json` only to resolve
-the connected slice needed by the proposed change.
-If the brief reports pre-ROI transfer measurements, treat them as collateral timing facts. Use
-them only when the declared objective includes whole-program or end-to-end time, while protecting
-the primary ROI.
+A kernel objective may declare `selection_objective.collateral="profiled"`. With a capable
+CUPTI baseline, one activity execution supplies correctness, primary kernel timing and explicitly
+profiled application collateral. Application objectives and `collateral="unprofiled"` retain
+separate unprofiled measurements. The manifest determines this requirement.
 
-The controller may measure one candidate per step to keep the evidence compact, but it does not
-choose or restrict that candidate. A candidate may contain several dependency-linked edits across
-multiple files, including a cross-file representation and producer/consumer rewrite. Continue
-from the accepted measured parent, or deliberately branch from the preserved best candidate after
-a regression. Repeat or combine a structural family whenever the source evidence supports it.
-Do not mix unrelated algorithms, flags, and layouts without a stated causal hypothesis. Preserve
-numerical, communication, and synchronization semantics.
+New adaptive runs otherwise take **one unprofiled benchmark execution per candidate**.
+A manifest can set `sampling.benchmark_max_runs` to 2 when a second execution is worth the cost.
+Count process executions, not baseline/candidate pairs.
+There is no automatic warmup. The baseline timing comes from its existing correctness execution
+and is reused. The two-execution policy can spend one execution recovering a missing baseline reference.
+Every candidate execution also runs the correctness oracle.
+Unchanged measured snapshots are cached rather than benchmarked again.
+When an unprofiled reference is required, if the same application metric from required profiling is substantially better
+than the baseline reference, check the baseline once more (maximum two unprofiled baseline runs).
+Use the conservative unprofiled reference; instrumented metrics never rank candidates. Remaining
+disagreement stays explicit. This check adds no warmup or repeated final campaign.
 
-Consume only the compact result and its named source slices. Never browse the application, raw
-trace, full counter table, profiler stdout, or large JSON broadly. Resolve one named dependency at
-a time. Full streams and captures stay under `raw/`.
+**There is no automatic final benchmark campaign.** Final selection reuses the existing timings
+and valid profiling evidence, acquiring missing attribution separately when necessary. No default
+final NCU audit is forced in this execution policy. Profiling executions are accounted separately
+from unprofiled benchmarks. A clear gain is a measured result, not statistically confirmed:
+confidence intervals stay null and unique-winner/significance claims remain inconclusive.
+Saved legacy plans retain their recorded policy; new starts use this bounded execution policy.
 
-Accept only a correct, statistically significant absolute improvement under the same fingerprint
-whose candidate profile shows the targeted cost fell and collateral cost did not erase the gain. An
-unresolved gate is `inconclusive`. Record the investigation cost through the controller's final
-workflow.
+**Stop when `campaign_complete=true` and report the supplied result.**
+The complete ledger, all changed lines/functions, and exact patches are already recorded in
+`ITERATIONS.md`, `iteration-ledger.json`, and each candidate’s `source-changes.json`.
+Use their links in the final reply. Reconstructing diffs, reopening source for line numbers,
+and recounting tokens add no reporting evidence. `report` retrieves the cached ledger if needed. The last
+evaluation already selects the measured result. Do not start another confirmation merely to
+resolve a close candidate ranking. Plain `confirm ID` reuses verified evidence; `confirm --fresh`
+is for a specific unresolved attribution/collateral question or an explicitly requested new study.
+A failed challenge preserves the published verification and saves its own diagnostic result.
+If independent timing passed but profiling/reporting failed, `confirm ID --retry-evidence`
+verifies unchanged inputs and reuses those samples; it does not repeat paired benchmarks.
+
+`check ID --build-only` compiles without correctness; `check ID` validates once;
+`check ID --observe` shares validation with activity collection. At most two linked unmeasured
+candidates may be checked before paired evaluation. Checks never establish a speedup.
+
+Report the exact measured metric, oracle, final sample count, source changes and material limits.
+No unique-winner or whole-process improvement claim unless its evidence resolves it. Preserve
+all candidates, including regressions, and the best verified source workspace.
+
+Controller costs are saved automatically to `resource-summary.json`. Session tokens come from
+supplied client counters and remain null when unavailable. `tokens.py` is an optional audit;
+normal completion needs no token command or skill inventory.
+For harness engineering only, read [adaptive acquisition](references/adaptive-acquisition.md)
+and [native providers](references/native-providers.md). Routine optimizers need neither.

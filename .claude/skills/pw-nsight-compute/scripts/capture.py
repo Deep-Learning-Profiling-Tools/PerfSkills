@@ -5,11 +5,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shlex
 import subprocess
 import sys
 import time
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "shared/scripts"))
+from bounded_process import run as run_process
 
 
 def write_json(path: Path, value: dict) -> None:
@@ -21,15 +25,13 @@ def run(argv: list[str], *, cwd: Path, stdout: Path, stderr: Path,
         timeout: float | None) -> tuple[int, float]:
     started = time.perf_counter()
     try:
-        proc = subprocess.run(argv, cwd=cwd, capture_output=True, timeout=timeout)
-        code, out, err = proc.returncode, proc.stdout, proc.stderr
-    except subprocess.TimeoutExpired as exc:
-        code = 124
-        out = exc.stdout or b""
-        err = (exc.stderr or b"") + b"\nProfileWeaver: command timed out\n"
+        proc = run_process(argv, cwd, os.environ.copy(), stdout, stderr, timeout)
+        code = proc.returncode
+    except (RuntimeError, OSError) as exc:
+        code = 124 if isinstance(exc, RuntimeError) else 127
+        with stderr.open("ab") as stream:
+            stream.write(("\nProfileWeaver: " + str(exc) + "\n").encode())
     elapsed = time.perf_counter() - started
-    stdout.write_bytes(out)
-    stderr.write_bytes(err)
     return code, elapsed
 
 
@@ -39,6 +41,7 @@ def main() -> int:
     parser.add_argument("--kernel-name", required=True,
                         help="Exact or regex body for one kernel; regex mode is the default")
     parser.add_argument("--exact-kernel", action="store_true")
+    parser.add_argument("--kernel-name-base", choices=["demangled", "mangled"], default="demangled")
     parser.add_argument("--nvtx-include", default=None,
                         help="Verified NCU NVTX include expression used with --nvtx")
     parser.add_argument("--launch-skip", type=int, default=0)
@@ -49,9 +52,13 @@ def main() -> int:
     parser.add_argument("--tool-version", default=None,
                         help="Version captured by cached preflight; avoids another probe")
     parser.add_argument("--timeout-s", type=float, default=None)
+    parser.add_argument("--skip-source", action="store_true", help="omit unrequested SASS source export")
     parser.add_argument("--cwd", type=Path, default=Path.cwd())
     parser.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args()
+    deadline = time.perf_counter() + args.timeout_s if args.timeout_s is not None else None
+    def budget_left():
+        return max(.001, deadline - time.perf_counter()) if deadline is not None else None
     command = args.command[1:] if args.command[:1] == ["--"] else args.command
     if not command:
         parser.error("target command is required after --")
@@ -80,7 +87,7 @@ def main() -> int:
     kernel_filter = args.kernel_name if args.exact_kernel else f"regex:{args.kernel_name}"
     capture_argv = [
         args.ncu, "--target-processes", "all", "--replay-mode", "kernel",
-        "--kernel-name-base", "demangled", "--kernel-name", kernel_filter,
+        "--kernel-name-base", args.kernel_name_base, "--kernel-name", kernel_filter,
         "--launch-skip", str(args.launch_skip), "--launch-count", str(args.launch_count),
         *(["--nvtx", "--nvtx-include", args.nvtx_include] if args.nvtx_include else []),
         *selector, "--force-overwrite", "--export", str(report_base),
@@ -88,7 +95,7 @@ def main() -> int:
     ]
     capture_code, capture_s = run(
         capture_argv, cwd=args.cwd.resolve(), stdout=output / "application.stdout.txt",
-        stderr=output / "application.stderr.txt", timeout=args.timeout_s)
+        stderr=output / "application.stderr.txt", timeout=budget_left())
 
     exports: list[dict] = []
     export_total_s = 0.0
@@ -98,13 +105,17 @@ def main() -> int:
             ("details", "details.csv", ["--print-details", "all", "--print-metric-name", "label-name"]),
             ("source", "source.csv", ["--print-source", "sass"]),
         ):
+            if page == "source" and args.skip_source:
+                continue
+            if deadline is not None and time.perf_counter() >= deadline:
+                break
             path = output / filename
             argv = [args.ncu, "--import", str(report), "--csv", "--page", page,
                     *extra, "--log-file", str(path)]
             code, elapsed = run(argv, cwd=args.cwd.resolve(),
                                 stdout=output / f"export-{page}.stdout.txt",
                                 stderr=output / f"export-{page}.stderr.txt",
-                                timeout=args.timeout_s)
+                                timeout=budget_left())
             export_total_s += elapsed
             exports.append({"page": page, "path": str(path), "returncode": code,
                             "elapsed_s": round(elapsed, 6), "command": shlex.join(argv)})
@@ -120,7 +131,8 @@ def main() -> int:
         "requested": {"section": sections, "kernel_name": args.kernel_name,
                       "exact_kernel": args.exact_kernel, "launch_skip": args.launch_skip,
                       "launch_count": args.launch_count, "nvtx_include": args.nvtx_include},
-        "resolved": resolved_mode | {"kernel_filter": kernel_filter, "replay_mode": "kernel"},
+        "resolved": resolved_mode | {"kernel_filter": kernel_filter, "kernel_name_base": args.kernel_name_base,
+                                    "replay_mode": "kernel"},
         "timing": {"capture_elapsed_s": round(capture_s, 6),
                    "export_elapsed_s": round(export_total_s, 6),
                    "total_elapsed_s": round(capture_s + export_total_s, 6)},
