@@ -10,7 +10,7 @@ from pathlib import Path
 
 from source_dependencies import append_dependencies
 from source_variants import append_variant, discover
-from source_scan import (direct_location, load, locate_call_site, locate_symbol, repo_relative,
+from source_scan import (direct_location, load, locate_call_site, locate_symbol, matching_backend, repo_relative,
                          source_files, write_slice)
 from source_symbols import symbol_candidates
 
@@ -46,7 +46,7 @@ def main():
     if not args.profile and not args.symbol and not args.call_site:
         parser.error("supply --profile, --symbol, --call-site, or a combination")
     profile = load(args.profile.resolve()) if args.profile else {"hotspots": []}
-    files = list(source_files(search_roots))
+    files = matching_backend(list(source_files(search_roots)), profile)
     output = args.output.resolve() if args.output else run / "source-targets.json"
     slices_dir = run / "source-slices"
     if not args.append and slices_dir.exists():
@@ -61,6 +61,7 @@ def main():
                   "resolution_mode": "call-site"} for symbol in args.call_site])
     actionable = explicit + [h for h in profile.get("hotspots", [])
                              if h.get("kind") not in {"memcpy", "sync", "runtime", "library"}]
+    measured_ranges = {}
 
     for hotspot in actionable:
         if len(targets) - original_target_count >= args.max_targets:
@@ -83,6 +84,17 @@ def main():
         if found is None:
             unresolved.append({"hotspot": hotspot.get("name"), "symbols": requested})
             continue
+        source_range = (found["path"], found["start"], found["end"])
+        if not explicit_mode and source_range in measured_ranges:
+            # Several generated kernels may resolve to the same enclosing function.
+            # Keep each attribution but expose the text only once.
+            measured_ranges[source_range].setdefault("additional_hotspots", []).append({
+                "hotspot": hotspot.get("name"),
+                "wall_pct": hotspot.get("pct_of_wall"),
+                "symbol": symbol,
+                "match_line": found["match"] + 1,
+            })
+            continue
         target_id = f"target-{len(targets) + 1:02d}"
         slice_path = slices_dir / f"{target_id}.txt"
         byte_count, digest = write_slice(slice_path, found["path"], found["lines"], found["start"], found["end"], hotspot.get("name"))
@@ -102,12 +114,15 @@ def main():
             "resolution": {"method": found["method"], "confidence": found["confidence"],
                            "candidate_matches": found["candidates"]},
         })
+        if not explicit_mode:
+            measured_ranges[source_range] = targets[-1]
 
     # Existing sibling implementations are a bounded search-space hint.  They are emitted
     # after measured hotspots and before callee/data dependencies so the agent can inspect a
     # known structural alternative without reading the whole source file.
     if args.max_variants > 0:
         variants = []
+        variant_ranges = set()
         for target in list(targets):
             if len(variants) >= args.max_variants:
                 break
@@ -120,7 +135,12 @@ def main():
             if not path.is_file():
                 continue
             for item in discover(target.get("symbol"), path, files, args.max_lines, args.context,
-                                 args.max_variants - len(variants)):
+                                 args.max_variants):
+                found = item["found"]
+                source_range = (found["path"], found["start"], found["end"])
+                if source_range in variant_ranges:
+                    continue
+                variant_ranges.add(source_range)
                 target_id = f"target-{len(targets) + 1:02d}"
                 variant = append_variant(item, target, target_id, slices_dir, repo)
                 targets.append(variant)

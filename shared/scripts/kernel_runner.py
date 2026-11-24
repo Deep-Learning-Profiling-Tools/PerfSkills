@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from kernel_capture_contract import kernel_pattern, locations, evidence_fingerprint, _signature
+
 import hashlib
 import json
 import os
@@ -14,80 +16,28 @@ from experiment_support import (REPO, candidate_dir, display, evidence_path_stat
                                 expanded_env, load, resolve, sha256, source_state, write)
 from kernel_evidence import compact_ncu
 from profile_policy import ncu_sections
+from acquisition_limits import bounded, limited, remaining
+from bounded_process import run as run_process
 
 
 CAPTURE = REPO / ".claude/skills/pw-nsight-compute/scripts/capture.py"
 REDUCE = REPO / ".claude/skills/pw-nsight-compute/scripts/reduce_csv.py"
 
 
-def kernel_pattern(plan: dict, phase: str) -> str:
-    config, attribution = plan.get("kernel_profile") or {}, plan.get("attribution") or {}
-    key = "baseline_kernel_regex" if phase == "baseline" else "variant_kernel_regex"
-    fallback = "baseline_target_regex" if phase == "baseline" else "variant_target_regex"
-    return config.get(key) or attribution.get(fallback)
+from resource_meter import capture_cost
 
 
-def locations(run: Path, candidate_id: str):
-    if candidate_id == "baseline":
-        return (run / "raw/ncu/baseline", run / "profile.ncu.baseline.json",
-                run / "kernel-diagnostics.json", run / "ncu-drilldowns", run / "ncu-cache.json")
-    if candidate_id == "final":
-        root = run / "ncu-final"
-        return (run / "raw/ncu/final", root / "profile.ncu.reprofile.json",
-                root / "kernel-diagnostics.json", root / "drilldowns", root / "ncu-cache.json")
-    root = candidate_dir(run, candidate_id) / "profile"
-    return (run / "raw/ncu" / candidate_id, root / "profile.ncu.variant.json",
-            root / "kernel-diagnostics.json", root / "ncu-drilldowns", root / "ncu-cache.json")
-
-
-def evidence_fingerprint(plan: dict, run: Path, candidate_id: str,
-                         workspace: Path, diagnostic: dict | None = None) -> tuple[str, list[dict]]:
-    values = {"repo": str(REPO), "run_dir": str(run), "run_id": plan["run_id"],
-              "workspace": str(workspace), "id": candidate_id}
-    config = plan.get("kernel_profile") or {}
-    states = [evidence_path_state(resolve(value, values), workspace)
-              for value in config.get("fingerprint_inputs") or []]
-    missing = [item["path"] for item in states if item.get("state") == "missing"]
-    if missing:
-        raise ValueError("kernel_profile fingerprint input missing: " + ",".join(missing))
-    if not states:
-        command0 = Path(expand(plan["execution"]["command"][0], values))
-        cwd = resolve(plan["execution"].get("cwd", "{workspace}"), values)
-        executable = command0 if command0.is_absolute() else cwd / command0
-        try:
-            local = executable.resolve().is_relative_to(workspace.resolve())
-        except (OSError, ValueError):
-            local = False
-        states = ([evidence_path_state(executable, workspace)] if local and executable.is_file()
-                  else [{"path": "declared-source", "state": "source-tree",
-                         "files": source_state(workspace, plan["source"]["fingerprint_globs"])}])
-    material = {"inputs": states, "kernel": kernel_pattern(plan, "variant"),
-                "sections": ncu_sections(config, "variant", diagnostic=diagnostic)}
-    digest = hashlib.sha256(json.dumps(material, sort_keys=True,
-                                       separators=(",", ":")).encode()).hexdigest()
-    return digest, states
-
-
-def _signature(plan: dict, workspace: Path, timeline: Path, phase: str,
-               candidate_id: str, force: bool, diagnostic: dict | None = None) -> str:
-    material = {"config": plan.get("kernel_profile"), "phase": phase,
-                "candidate": candidate_id, "force": force,
-                "command": plan.get("execution", {}).get("command"),
-                "source": source_state(workspace, plan["source"]["fingerprint_globs"]),
-                "timeline": sha256(timeline),
-                "sections": ncu_sections(plan.get("kernel_profile") or {}, phase, force,
-                                         diagnostic),
-                "ncu_scripts": source_state(CAPTURE.parent, ["*.py"])}
-    return hashlib.sha256(json.dumps(material, sort_keys=True,
-                                     separators=(",", ":")).encode()).hexdigest()
-
-
+@capture_cost("pw-nsight-compute")
+@bounded
 def run_kernel_profile(plan: dict, run: Path, candidate_id: str, workspace: Path,
                        timeline: Path, phase: str, force: bool,
                        reason: str | None = None, diagnostic: dict | None = None) -> dict:
     config = plan.get("kernel_profile") or {}
     if not config.get("enabled"):
         return {"status": "disabled"}
+    if limited(plan) and not force:
+        config = config | {"bounded_question": True}
+        plan = plan | {"kernel_profile": config}
     raw, output, diagnostics, drilldowns, cache = locations(run, candidate_id)
     signature = _signature(plan, workspace, timeline, phase, candidate_id, force, diagnostic)
     fingerprint, inputs = evidence_fingerprint(plan, run, candidate_id, workspace, diagnostic)
@@ -108,10 +58,15 @@ def run_kernel_profile(plan: dict, run: Path, candidate_id: str, workspace: Path
     execution = plan["execution"]
     command = [expand(value, values) for value in execution["command"]]
     cwd = resolve(execution.get("cwd", "{workspace}"), values)
+    timeout = remaining(config.get("timeout_s", 900))
     capture = [sys.executable, str(CAPTURE), "--output-dir", str(raw),
                "--kernel-name", kernel_pattern(plan, phase),
                "--launch-count", str(config.get("launch_count", 1)),
-               "--timeout-s", str(config.get("timeout_s", 900)), "--cwd", str(cwd)]
+               "--timeout-s", str(timeout), "--cwd", str(cwd)]
+    if config.get("kernel_name_base"):
+        capture += ["--kernel-name-base", config["kernel_name_base"]]
+    if limited(plan) and not force and "gpu-source-line" not in (config.get("evidence_needs") or []):
+        capture.append("--skip-source")
     for section in ncu_sections(config, phase, force, diagnostic):
         capture += ["--section", section]
     if config.get("exact_kernel"):
@@ -125,21 +80,31 @@ def run_kernel_profile(plan: dict, run: Path, candidate_id: str, workspace: Path
     env = (os.environ.copy() | expanded_env(plan.get("env", {}), values) |
            expanded_env(execution.get("env", {}), values) |
            expanded_env(config.get("env", {}), values))
-    proc = subprocess.run([*capture, "--", *command], cwd=REPO, env=env,
-                          capture_output=True, text=True, timeout=config.get("timeout_s", 900) + 60)
-    (raw / "controller-capture.stdout.txt").write_text(proc.stdout)
-    (raw / "controller-capture.stderr.txt").write_text(proc.stderr)
+    write(raw / "acquisition.json", {"status": "running", "candidate": candidate_id,
+          "sections": ncu_sections(config, phase, force, diagnostic), "budget_remaining_s": timeout})
+    if limited(plan):
+        proc = run_process([*capture, "--", *command], REPO, env, raw / "controller-capture.stdout.txt",
+                           raw / "controller-capture.stderr.txt", remaining(timeout))
+    else:
+        proc = subprocess.run([*capture, "--", *command], cwd=REPO, env=env,
+                              capture_output=True, text=True, timeout=config.get("timeout_s", 900) + 60)
+        (raw / "controller-capture.stdout.txt").write_text(proc.stdout)
+        (raw / "controller-capture.stderr.txt").write_text(proc.stderr)
     if proc.returncode:
         raise RuntimeError(f"NCU capture failed for {candidate_id}; see {display(raw)}")
 
     reduce = [sys.executable, str(REDUCE), "--csv", str(raw / "metrics.csv"),
               "--capture-metadata", str(raw / "capture.json"), "--details-csv", str(raw / "details.csv"),
-              "--source-csv", str(raw / "source.csv"), "--timeline-profile", str(timeline),
+              "--timeline-profile", str(timeline),
               "--run-id", plan["run_id"], "--phase", phase, "--output", str(output),
               "--diagnostics-output", str(diagnostics), "--drilldown-dir", str(drilldowns)]
+    if not limited(plan) or (raw / "source.csv").is_file():
+        reduce += ["--source-csv", str(raw / "source.csv")]
     if candidate_id not in {"baseline", "final"}:
         reduce += ["--variant", candidate_id]
-    reduced = subprocess.run(reduce, cwd=REPO, capture_output=True, text=True)
+    elif candidate_id == "final" and load(timeline, {}).get("variant"):
+        reduce += ["--variant", load(timeline, {})["variant"]]
+    reduced = subprocess.run(reduce, cwd=REPO, capture_output=True, text=True, timeout=remaining(60))
     (raw / "controller-reduce.stdout.txt").write_text(reduced.stdout)
     (raw / "controller-reduce.stderr.txt").write_text(reduced.stderr)
     if reduced.returncode or not output.is_file() or not diagnostics.is_file():
@@ -148,7 +113,7 @@ def run_kernel_profile(plan: dict, run: Path, candidate_id: str, workspace: Path
                              ("ncu-diagnostics.schema.json", diagnostics)):
         checked = subprocess.run([sys.executable, str(REPO / "shared/scripts/validate.py"),
                                   str(REPO / "shared/schema" / schema), str(document)],
-                                 cwd=REPO, capture_output=True, text=True)
+                                 cwd=REPO, capture_output=True, text=True, timeout=remaining(60))
         (raw / f"validate-{schema}.stdout.txt").write_text(checked.stdout)
         (raw / f"validate-{schema}.stderr.txt").write_text(checked.stderr)
         if checked.returncode:

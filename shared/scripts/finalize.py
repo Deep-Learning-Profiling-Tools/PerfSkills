@@ -69,7 +69,9 @@ def main():
                           "no unobserved mechanism is inferred."),
         "no_collateral": gate(final["gates"].get("no_wall_regression_over_threshold"),
                               f"Whole-process ratio CI [{wall_comparison['ci95'][0]:.6g}, "
-                              f"{wall_comparison['ci95'][1]:.6g}] excludes a regression larger than the threshold."),
+                              f"{wall_comparison['ci95'][1]:.6g}]; wall policy="
+                              f"{plan['sampling'].get('wall_gate', 'advisory')}; "
+                              f"observed nonregression={final.get('advisory', {}).get('wall_nonregression_observed')}."),
         "attribution": gate(same_profile_contract and target["baseline"] is not None and target["variant"] is not None,
                             "Baseline and winner use comparable normalized profiles and both explicit target selectors matched."),
         "reproducible": gate(fingerprint_preserved,

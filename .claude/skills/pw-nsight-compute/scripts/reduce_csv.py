@@ -11,6 +11,7 @@ from pathlib import Path
 from ncu_artifacts import read_rules, read_source_hotspots, write_drilldowns
 from ncu_csv import load, read_metrics, write
 from ncu_kernel import choose_bottleneck, reduce_kernel
+from ncu_timing import join
 
 PROTOCOL = "profileweaver.ncu-diagnostics/v1"
 
@@ -80,35 +81,26 @@ def main() -> int:
 
     timeline = load(args.timeline_profile, {})
     top = kernels[0] if kernels else {"name": "unknown-kernel"}
-    totals = timeline.get("totals") or {"wall_time_s": 0, "gpu_busy_s": None,
-                                       "attributed_s": None}
-    hotspots = timeline.get("hotspots") or [{
-        "rank": 1, "name": top["name"], "kind": "gpu-kernel", "file": None, "line": None,
-        "module": None, "self_time_s": 0, "total_time_s": None, "pct_of_wall": 0,
-        "calls": None, "samples": None, "callpath": None, "metrics": {}, "amdahl_ceiling": 1,
-    }]
-    for hotspot in hotspots:
-        if hotspot.get("name") == top.get("name") or len(hotspots) == 1:
-            hotspot["metrics"] = (hotspot.get("metrics") or {}) | {"ncu": top}
-            break
+    totals, hotspots, timing_provenance = join(timeline, kernels, args.phase, args.variant, args.run_id)
     capture_command = (capture.get("capture") or {}).get("command", "")
     run_command = args.run_command or (timeline.get("workload") or {}).get("run_command") or ""
     profile = {
         "run_id": args.run_id, "phase": args.phase, "variant": args.variant,
         "tool": {"name": "NVIDIA Nsight Compute",
                  "version": (capture.get("tool") or {}).get("version") or "unknown",
-                 "mode": "kernel replay/full section set",
+                 "mode": "filtered kernel replay",
                  "command": capture_command, "sampling_hz": None,
                  "events": [item["metric"] for item in rows[:20]], "overhead_factor": None,
                  "multiplexed": None},
         "workload": (timeline.get("workload") or {"run_command": run_command}) | {"run_command": run_command},
         "machine": timeline.get("machine") or {}, "totals": totals, "hotspots": hotspots,
         "bottleneck": choose_bottleneck(top), "kernel_diagnostics": diagnostics,
+        "scope": timing_provenance,
         "warnings": (timeline.get("warnings") or []) + ([{
             "kind": "missing-timeline",
-            "detail": "NCU replay is not an end-to-end timer; join this profile to Nsight Systems before ranking impact",
+            "detail": "Current application timing is unknown; replay counters identify captured symbols only. Older timeline values are context, not candidate measurements.",
             "magnitude": None,
-        }] if not timeline else []),
+        }] if timing_provenance["timing_join"] == "context-only" else []),
         "raw_artifacts": [str(args.csv), str(args.capture_metadata),
                           (capture.get("capture") or {}).get("report")],
     }

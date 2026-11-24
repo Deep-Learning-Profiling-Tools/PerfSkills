@@ -7,6 +7,7 @@ import hashlib
 import json
 import re
 import subprocess
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
@@ -28,13 +29,17 @@ def write(path, value):
 
 def validate_plan(plan):
     sampling = plan.get("sampling") or {}
-    if sampling.get("min_pairs", 0) < 5 or sampling.get("final_min_pairs", 0) < 5:
-        raise ValueError("candidate and final sampling require at least five pairs")
+    bounded = sampling.get("measurement_policy") == "single-or-two-v3"
+    minimum_final = 3 if sampling.get("mode") == "adaptive" else 5
+    if bounded and (sampling.get("benchmark_max_runs") not in {1, 2} or sampling.get("screen_warmup", 0) or sampling.get("final_max_pairs", 0)):
+        raise ValueError("bounded policy permits at most two benchmark executions and no warmup/final pairs")
+    if not bounded and (sampling.get("min_pairs", 0) < 5 or sampling.get("final_min_pairs", 0) < minimum_final):
+        raise ValueError(f"standard sampling requires five pairs; final sampling requires {minimum_final}")
     if sampling["min_pairs"] > sampling["max_pairs"]:
         raise ValueError("min_pairs cannot exceed max_pairs")
     if sampling["final_min_pairs"] > sampling["final_max_pairs"]:
         raise ValueError("final_min_pairs cannot exceed final_max_pairs")
-    if sampling.get("mode") == "winner-confirmation":
+    if not bounded and sampling.get("mode") in {"winner-confirmation", "adaptive"}:
         low = sampling.get("screen_min_pairs", 1)
         high = sampling.get("screen_max_pairs", low)
         if low < 1 or low > high:
@@ -110,6 +115,32 @@ def extract(spec, stdout, stderr, wall_s, variables):
     group = spec.get("group", 1)
     value = match.group(group)
     return float(value) * float(spec.get("scale", 1.0))
+
+
+def reporting_quantum(spec, stdout, stderr, variables):
+    """Read decimal output granularity, not timer accuracy or sampling noise.
+
+    Integer counters and wall timers have no inferred rounding quantum. An explicit
+    sampling.metric_resolution, if supplied, overrides this diagnostic downstream.
+    """
+    source = spec.get("source", "wall")
+    if source == "wall":
+        return None
+    text = (stdout if source == "stdout" else stderr if source == "stderr" else
+            resolve(spec["path"], variables).read_text(errors="replace"))
+    match = re.search(spec["regex"], text, re.MULTILINE)
+    if not match:
+        return None
+    value = match.group(spec.get("group", 1)).strip()
+    if "." not in value:
+        return None
+    try:
+        decimal = Decimal(value)
+        if not decimal.is_finite():
+            return None
+        return float(Decimal(10) ** decimal.as_tuple().exponent) * abs(float(spec.get("scale", 1)))
+    except (InvalidOperation, ValueError, OverflowError):
+        return None
 
 
 def check_oracle(spec, returncode, stdout, stderr, cwd, env, variables, log_stem):

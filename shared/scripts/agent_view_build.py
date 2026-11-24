@@ -160,13 +160,14 @@ def build_view(run: Path, max_bytes=DEFAULT_MAX_BYTES, output: Path | None = Non
     return packet, packet_path
 
 def drilldown(run: Path, section: str, limit: int):
+    from candidate_evidence import compact_hotspots
+    limit = min(50, max(1, limit))
     report = load(run / "report.json") or {}
     baseline = load(run / "profile.baseline.json") or {}
     variant_path = select_variant_profile(run, report)
     variant = load(variant_path) if variant_path else {}
     if section == "hotspots":
-        return {"baseline": (baseline.get("hotspots") or [])[:limit],
-                "variant": (variant.get("hotspots") or [])[:limit]}
+        return {"baseline": compact_hotspots(baseline, limit), "variant": compact_hotspots(variant, limit)}
     if section == "warnings":
         return {"baseline": baseline.get("warnings") or [], "variant": variant.get("warnings") or [],
                 "limits": report.get("limits")}
@@ -182,7 +183,8 @@ def drilldown(run: Path, section: str, limit: int):
         failed = result.get("failed_stage")
         return {"result": result, "failed_stage": (state.get("stages") or {}).get(failed) if failed else None}
     if section == "artifacts":
-        return {"profiles": [str(p.relative_to(run)) for p in sorted(run.glob("profile*.json"))],
+        raw = [str(p.relative_to(run)) for p in sorted((run / "raw").rglob("*")) if p.is_file()] if (run / "raw").exists() else []
+        return {"profiles": [str(p.relative_to(run)) for p in sorted(run.glob("profile*.json"))][:limit],
                 "benchmarks": [str(p.relative_to(run)) for p in sorted(run.glob("bench*.json"))],
-                "raw": [str(p.relative_to(run)) for p in sorted((run / "raw").rglob("*")) if p.is_file()] if (run / "raw").exists() else []}
+                "raw": raw[:limit], "raw_omitted": max(0, len(raw) - limit)}
     raise ValueError(section)

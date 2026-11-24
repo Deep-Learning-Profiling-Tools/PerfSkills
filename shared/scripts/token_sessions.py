@@ -26,8 +26,7 @@ def claude_transcript(session_id=None, project_dir=None):
     sid = session_id or os.environ.get("CLAUDE_CODE_SESSION_ID")
     if sid and (d / f"{sid}.jsonl").exists():
         return d / f"{sid}.jsonl"
-    files = sorted(d.glob("*.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True)
-    return files[0] if files else None
+    return None
 
 def read_claude_usage(path):
     """Aggregate real usage, plus Claude Code's own per-skill attribution."""
@@ -99,5 +98,6 @@ def read_session_usage(agent, session_id=None, project_dir=None):
             return {"source": None, "note": "no Claude Code transcript found for this project"}
         return read_claude_usage(p)
     if agent == "codex":
-        return read_codex_usage() or {"source": None, "note": "no Codex goals db found"}
+        from codex_usage import read
+        return read(session_id)
     return {"source": None, "note": f"agent '{agent}' not detected; cannot read a transcript"}

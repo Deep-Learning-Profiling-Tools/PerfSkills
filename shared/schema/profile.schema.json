@@ -79,7 +79,7 @@
       "type": "object",
       "required": ["wall_time_s"],
       "properties": {
-        "wall_time_s": { "type": "number", "minimum": 0 },
+        "wall_time_s": { "type": ["number", "null"], "minimum": 0 },
         "cpu_time_s": { "type": ["number", "null"] },
         "gpu_busy_s": { "type": ["number", "null"] },
         "mpi_time_s": { "type": ["number", "null"] },
@@ -115,12 +115,12 @@
           "file": { "type": ["string", "null"] },
           "line": { "type": ["integer", "null"] },
           "module": { "type": ["string", "null"], "description": "Binary or shared object." },
-          "self_time_s": { "type": "number", "minimum": 0 },
+          "self_time_s": { "type": ["number", "null"], "minimum": 0 },
           "total_time_s": {
             "type": ["number", "null"],
             "description": "Inclusive of callees. Null if the tool does not do callpath attribution."
           },
-          "pct_of_wall": { "type": "number", "minimum": 0 },
+          "pct_of_wall": { "type": ["number", "null"], "minimum": 0 },
           "calls": { "type": ["integer", "null"] },
           "samples": { "type": ["integer", "null"], "description": "Sample count; low counts mean a noisy share." },
           "callpath": { "type": ["array", "null"], "items": { "type": "string" } },

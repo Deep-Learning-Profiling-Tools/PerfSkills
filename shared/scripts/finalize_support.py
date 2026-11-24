@@ -29,6 +29,15 @@ def match_hotspot(profile, pattern):
 
 def target_measurement(plan, before, after):
     spec = plan.get("attribution") or {}
+    if spec.get("scope") in {"roi-gpu-busy", "roi-wall"}:
+        metric = "wall_time_s" if spec["scope"] == "roi-wall" else "gpu_busy_s"
+        base = (before.get("totals") or {}).get(metric)
+        opt = (after.get("totals") or {}).get(metric)
+        left = next((x for x in before.get("hotspots", []) if x.get("kind") == "gpu-kernel"), None)
+        right = next((x for x in after.get("hotspots", []) if x.get("kind") == "gpu-kernel"), None)
+        return {"baseline": left, "variant": right, "metric": metric, "direction": "lower",
+                "base": base, "opt": opt,
+                "moved": base is not None and opt is not None and opt < base}
     metric = spec.get("metric", "self_time_s")
     direction = spec.get("direction", "lower")
     left = match_hotspot(before, spec.get("baseline_target_regex"))

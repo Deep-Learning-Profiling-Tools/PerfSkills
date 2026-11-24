@@ -1,7 +1,12 @@
 # Investigation state is created locally by the harness and is never source code.
 runs/
 workloads/
-shared/tests/
+shared/tests/*
+!shared/tests/test_adaptive.py
+!shared/tests/compare_acquisition.py
+!shared/tests/replay_refinement.py
+!shared/tests/test_native_evidence.py
+shared/config/profilers.local.json
 
 # Raw profiler output that may be produced outside a run directory.
 perf.data

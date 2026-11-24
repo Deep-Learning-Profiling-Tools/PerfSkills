@@ -77,13 +77,15 @@ def _compact_latest(latest: list[dict], limit: int) -> str:
 
 def render(run, phase, action, request, fingerprint, totals, top, shape, source_refs,
            frontier, history, iterations, best, features, ncu, latest, failed_gates,
-           variant_refs=None, max_tokens=320, default_tokens=320, ncu_tokens=480):
+           variant_refs=None, max_tokens=320, default_tokens=320, ncu_tokens=480,
+           acquisition=None, current=None, application=None, baseline_quality=None):
     launch = shape.get("top_launch") or {}
     launch_text = ""
     if launch:
         grid = "x".join(map(str, launch.get("grid") or []))
         block = "x".join(map(str, launch.get("block") or []))
-        launch_text = f" grid={grid} block={block}"
+        basis = f"{launch['basis']}: " if launch.get("basis") else ""
+        launch_text = f" {basis}grid={grid} block={block}"
     api_text = ""
     if shape.get("kernel_launches") is not None:
         sync = shape.get("synchronizations") or 0
@@ -105,6 +107,8 @@ def render(run, phase, action, request, fingerprint, totals, top, shape, source_
     count, method = token_counter()
     cap = ncu_tokens if ncu and max_tokens == default_tokens else max_tokens
     dependency_map = _compact_dependency_map((source_refs or []) + (variant_refs or []))
+    from phase_opportunity import compact
+    phase_line = compact(shape.get("phase_opportunity") or {}) if phase in {"optimize", "iterate"} else None
 
     for level in range(6):
         targets = _compact_refs(source_refs, 4 if level <= 1 else 2 if level == 2 else 0)
@@ -116,12 +120,16 @@ def render(run, phase, action, request, fingerprint, totals, top, shape, source_
                          if ncu else "READ: see source-targets.json and source-slices/; only those slices.")
         if variant_refs and not ncu:
             read_line = read_line.rstrip(".") + f"; variants={variants}."
+        if current:
+            read_line = (f"READ candidate {current['id']}: {current['source_targets']}; "
+                         f"target slice={current.get('slice')}; connected dependencies allowed.")
         top_name = _trim(top.get("name"), 72 if level <= 1 else 64 if level == 2 else 52)
         setup = ""
         if shape.get("setup_copy_s"):
             setup = (f" setup-copy={shape.get('setup_copy_bytes', 0) / 1e6:.1f}MB/"
                      f"{fmt_ms(shape.get('setup_copy_s'))}ms")
-        measure = (f"TIME: ROI/GPU={fmt_ms(totals.get('wall_time_s'))}/"
+        basis = "process/GPU" if shape.get("timing_basis") == "process" else "ROI/GPU"
+        measure = (f"{'BASELINE' if acquisition else 'TIME'}: {basis}={fmt_ms(totals.get('wall_time_s'))}/"
                    f"{fmt_ms(totals.get('gpu_busy_s'))}ms; top={top_name} "
                    f"{fmt_ms(top.get('self_time_s'))}ms/{round(top.get('pct_of_wall') or 0,1)}% "
                    f"calls={top.get('calls')}; shape={','.join(shape['labels'])}.{setup}{launch_text}"
@@ -131,20 +139,35 @@ def render(run, phase, action, request, fingerprint, totals, top, shape, source_
         include_facts = level <= 1
         include_history = level <= 2
         ncu_lines = render_ncu(
-            ncu,
+            (current.get("ncu") if current else ncu),
             stall_limit=3 if level <= 1 else 2 if level == 2 else 1,
             rule_limit=3 if level <= 1 else 2 if level == 2 else 1,
             include_mem=(level <= 2),
             include_diag=(level <= 3),
         )
         verify = (f"GATE fp={(fingerprint.get('contract_sha256') or 'MISSING')[:12]} "
-                  f"oracle={oracle}; pair=ROI+NCU; fail={failed_gates or 'none'}." )
+                  f"oracle={oracle}; accept=unprofiled+correctness+profile; fail={failed_gates or 'none'}." )
         lines = [
-            (0, header), (0, measure), (0, read_line),
-            (0, "EVIDENCE: measured counters/slices; agent chooses edits; multi-file allowed."),
+            (0, header),
+            *([(0, "REPORTED: " + "; ".join(f"{f['label']}={f['value']}" for f in application[:6]))]
+              if application else []),
+            *([(0, "REFERENCE: " + baseline_quality["status"] +
+                f"; unprofiled baseline runs={baseline_quality['unprofiled_runs']}; inspect --section harness.")]
+              if baseline_quality and baseline_quality.get("status") in {"refreshed", "unresolved"} else []),
+            *(([(0, f"CANDIDATE {current['id']}: {current['tool']}; captured={_trim(current.get('name'), 100)}; "
+                 f"{'ancestor anchor; ' if current.get('ancestor_anchor') else ''}"
+                 f"ranking={(current.get('ranking') or {}).get('status', 'provisional')}; "
+                 f"timing-disagreement={bool((current.get('ranking') or {}).get('diagnostic_disagreement'))}.")]
+               if current else [])),
+            (0, read_line), *([(0, phase_line)] if phase_line else []), (1 if current else 0, measure),
+            (0, (f"EVIDENCE: BASELINE is historical; candidate evidence names its snapshot; latest={acquisition['tool']}/"
+                 f"{acquisition['reason']}; timing alone leaves internal mechanisms unknown. "
+                 "New question: evidence current --need CAP or --evidence timeline|kernel."
+                 if acquisition else "EVIDENCE: measured counters/slices; agent chooses edits; multi-file allowed.")),
             (0, verify),
-            (2, f"DEPENDENCY FRONTIER: {dependency_map}; connected slices are valid."),
-            *(([(0, f"LAST RESULTS: {latest_text}; ROI decides, NCU kernel delta explains.")]
+            *(([(2, f"DEPENDENCY FRONTIER: {dependency_map}; connected slices are valid.")]
+               if not current else [])),
+            *(([(0, f"LAST RESULTS: {latest_text}; rank unprofiled; only captured mechanisms are known.")]
                if include_latest else [])),
             *(([(0, line) for line in ncu_lines] if ncu_lines else [])),
             *(([(2 if ncu else 1, f"SOURCE FACTS: {facts}; syntax facts, not profiler mechanisms.")]

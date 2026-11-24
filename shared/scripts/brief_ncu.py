@@ -22,9 +22,11 @@ def render_ncu(ncu, stall_limit=3, rule_limit=3, include_mem=True, include_diag=
                   if item.get("name") == "roofline-to-amdahl"), {})
     hierarchy = chain.get("hierarchy") or {}
     roof = hierarchy.get("roofline") or {}
-    roof_text = (f"{roof.get('precision')}/{roof.get('classification')} "
-                 f"K≤{_fmt((hierarchy.get('kernel') or {}).get('speedup_ceiling'))}x "
-                 f"ROI≤{_fmt((hierarchy.get('application') or {}).get('speedup_ceiling'))}x")
+    bounds = [(label, (hierarchy.get(scope) or {}).get("speedup_ceiling"))
+              for label, scope in (("kernel", "kernel"), ("ROI", "application"))]
+    roof_text = ("; Roofline " + str(roof["classification"]) + " " +
+                 " ".join(f"{label}≤{_fmt(value)}x" for label, value in bounds if value is not None)
+                 if roof.get("classification") and any(value is not None for _, value in bounds) else "")
     dram_r, dram_w = memory.get("dram_read_bytes"), memory.get("dram_write_bytes")
     r_gb = dram_r / 1e9 if isinstance(dram_r, (int, float)) else None
     w_gb = dram_w / 1e9 if isinstance(dram_w, (int, float)) else None
@@ -39,7 +41,7 @@ def render_ncu(ncu, stall_limit=3, rule_limit=3, include_mem=True, include_diag=
                      f" srcstall={source_stall or 'null'}")
     alternatives = ",".join(item.get("name") for item in (advice.get("alternatives") or [])
                             if item.get("name")) or "none"
-    diag = f"GPA: primary={primary}; alt={alternatives}; roof={roof_text}."
+    diag = f"DERIVED FROM NCU: primary={primary}; alt={alternatives}{roof_text}."
     lines = [
         f"NCU: sections={','.join(ncu.get('section') or [])}; cost={_fmt(ncu.get('total_s'))}s; metrics={ncu.get('metric_count')}.",
         (f"NCU: kernel={fmt_ms((ncu.get('duration_ns') or 0)/1e9)}ms "

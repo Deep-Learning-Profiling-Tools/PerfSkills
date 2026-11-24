@@ -10,6 +10,14 @@ from profiler_registry import load, select
 
 def resolve_routes(plan: dict, run: Path) -> dict | None:
     config = plan.get("profiling") or {}
+    if config.get("baseline_mode") == "capability-first-v2":
+        # Actual provider selection and runtime capability disposition are recorded
+        # after the binary is built, in baseline-acquisition.json.
+        document = {"protocol": "profileweaver.profiler-routing/v1", "phases": {
+            "discovery": {"status": "on-demand", "needs": config.get("baseline_needs", ["gpu-hotspot"])},
+            "diagnostic": {"status": "deferred", "reason": "no-unconditional-baseline-counter-replay"}}}
+        write(run / "profiler-routing.json", document)
+        return document
     phases = {"discovery": config.get("discovery_needs") or [],
               "diagnostic": config.get("diagnostic_needs") or []}
     if not any(phases.values()):

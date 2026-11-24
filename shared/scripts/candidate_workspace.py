@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from candidate_patch import readable, make_patch, numeric_only_patch
+
 import difflib
 import re
 import shutil
@@ -13,13 +15,15 @@ from experiment_report import refresh_brief
 from candidate_policy import seed_frontier
 from experiment_state import context, ensure_initialized, save_state
 from experiment_support import (REPO, candidate_dir, display, expand, source_files, write)
+from adaptive_policy import enabled
 
 ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
-NUMBER = re.compile(r"(?<![A-Za-z_])(?:0x[0-9A-Fa-f]+|\d+(?:\.\d*)?(?:[eE][+-]?\d+)?)(?![A-Za-z_])")
 
 
 def prepare(plan: dict, run: Path, variables: dict[str, str], args) -> dict:
     state, baseline = ensure_initialized(plan, run, variables)
+    if state.get("early_stop") and args.id not in state.get("candidates", {}):
+        raise ValueError("flexible campaign has closed: " + state["early_stop"])
     seed_frontier(state, run)
     if not ID_PATTERN.match(args.id) or args.id == "baseline":
         raise ValueError("candidate id must be a safe non-baseline identifier")
@@ -27,6 +31,8 @@ def prepare(plan: dict, run: Path, variables: dict[str, str], args) -> dict:
     if parent_id == "current":
         parent_id = ((state.get("confirmed") or state.get("best") or {}).get("id") or
                      "baseline")
+        if enabled(plan) and not state.get("confirmed") and (state.get("best") or {}).get("improvement", 1) < 1:
+            parent_id = "baseline"
     if parent_id != "baseline" and parent_id not in state["candidates"]:
         raise ValueError(f"unknown parent candidate: {args.parent}")
     # ProfileWeaver reports measured classifications; the agent owns candidate selection.
@@ -36,10 +42,14 @@ def prepare(plan: dict, run: Path, variables: dict[str, str], args) -> dict:
     metadata = {"id": args.id, "parent": parent_id, "mechanism": args.mechanism,
                 "description": args.description, "workspace": str(workspace),
                 "status": "prepared"}
+    from rewrite_evidence import proposal
+    metadata.update(proposal(plan, run, state, parent_id, args))
+    from selection_objective import candidate_selector
+    metadata.update(candidate_selector(state, parent_id, getattr(args, "target_kernel", None)))
     if workspace.exists():
         prior = state["candidates"].get(args.id)
         if prior and all(prior.get(key) == metadata.get(key)
-                         for key in ["parent", "mechanism", "description", "workspace"]):
+                         for key in ["parent", "mechanism", "description", "workspace", "hypothesis", "kernel_selector"]):
             return {"status": "cached", "candidate": args.id, "workspace": display(workspace)}
         raise ValueError(f"candidate workspace already exists: {workspace}")
     parent = baseline if parent_id == "baseline" else Path(state["candidates"][parent_id]["workspace"])
@@ -54,7 +64,7 @@ def prepare(plan: dict, run: Path, variables: dict[str, str], args) -> dict:
             "workspace": display(workspace)}
 
 
-def prepare_batch(plan: dict, run: Path, variables: dict[str, str], specs: list[str]) -> dict:
+def prepare_batch(plan: dict, run: Path, variables: dict[str, str], specs: list[str], *, because=None, consider=None, target_kernel=None) -> dict:
     # A screen is deliberately one candidate.  Sibling candidates used to be
     # evaluated in one batch and then only the batch winner was promoted; any
     # useful mechanism in the other siblings was therefore lost instead of
@@ -78,45 +88,9 @@ def prepare_batch(plan: dict, run: Path, variables: dict[str, str], specs: list[
     rows = []
     for candidate_id, parent, mechanism, description in parsed:
         rows.append(prepare(plan, run, variables, SimpleNamespace(
-            id=candidate_id, parent=parent, mechanism=mechanism, description=description)))
+            id=candidate_id, parent=parent, mechanism=mechanism, description=description, because=because, consider=consider, target_kernel=target_kernel)))
     return {"status": "prepared", "root": display(run / "candidates"),
             "candidates": [row["candidate"] for row in rows]}
-
-
-def readable(path: Path) -> list[str] | None:
-    try:
-        return path.read_text().splitlines(keepends=True)
-    except (UnicodeDecodeError, OSError):
-        return None
-
-
-def make_patch(parent: Path, workspace: Path, patterns: list[str], output: Path) -> str:
-    left = {str(path.relative_to(parent)): path for path in source_files(parent, patterns)}
-    right = {str(path.relative_to(workspace)): path for path in source_files(workspace, patterns)}
-    chunks = []
-    for name in sorted(set(left) | set(right)):
-        before = readable(left[name]) if name in left else []
-        after = readable(right[name]) if name in right else []
-        if before is None or after is None or before == after:
-            continue
-        chunks.extend(difflib.unified_diff(before, after,
-                      fromfile=f"parent/{name}", tofile=f"candidate/{name}", n=3))
-    text = "".join(chunks)
-    output.write_text(text)
-    return text
-
-
-def numeric_only_patch(text: str) -> bool:
-    """Classify a pure constant sweep for reporting; never reject it."""
-    removed, added = [], []
-    for line in text.splitlines():
-        if line.startswith(("---", "+++")):
-            continue
-        if line.startswith("-"):
-            removed.append(NUMBER.sub("#", line[1:].strip()))
-        elif line.startswith("+"):
-            added.append(NUMBER.sub("#", line[1:].strip()))
-    return bool(removed and added and sorted(removed) == sorted(added))
 
 
 def item(plan: dict, workspace: Path, candidate_id: str, patch: Path | None,
@@ -168,10 +142,12 @@ def campaign_plan(plan: dict, run: Path, baseline: Path, state: dict,
               "run_id": f"{plan['run_id']}-{batch.name}", "run_dir": str(batch),
               "env": plan.get("env", {}), "fingerprint_inputs": [str((run / "experiment-plan.json"))],
               "metric": plan["metric"], "oracle": plan.get("oracle"),
-              "sampling": plan["sampling"], "timeout_s": plan.get("timeout_s"),
+              "sampling": dict(plan["sampling"]), "timeout_s": plan.get("timeout_s"),
               "baseline": item(plan, baseline, "baseline", None, build=plan.get("build_baseline", False)),
               "candidates": candidates}
     if campaign_phase == "final-only":
+        if result["sampling"].get("mode") == "adaptive":
+            result["sampling"]["finalists"] = len(ids)
         screening = []
         for candidate_id in ids:
             prior = state["candidates"][candidate_id].get("result")
@@ -181,6 +157,29 @@ def campaign_plan(plan: dict, run: Path, baseline: Path, state: dict,
         result["screening"] = screening
     if plan.get("attribution"):
         result["attribution"] = plan["attribution"]
+    if result["sampling"].get("mode") == "adaptive":
+        if result["sampling"].get("measurement_policy") == "single-or-two-v3":
+            from experiment_support import load
+            result["baseline_reference"] = load(run / "baseline-timing.json", {}).get("sample")
+        if phase == "screen":
+            from adaptive_policy import warmup_for_profile
+            from experiment_support import load
+            count, reason = warmup_for_profile(result["sampling"], load(run / "profile.baseline.json", {}))
+            result["sampling"]["screen_warmup"] = count
+            if reason:
+                result["sampling"]["warmup_decision"] = reason
+        result["sampling"]["incumbent_speedup"] = (state.get("best") or {}).get("improvement", 1.0)
+        from statistics import median
+        prior_baselines = [(m.get("result", {}).get("baseline_metric") or {}).get("median")
+                           for m in state.get("candidates", {}).values() if m.get("result")]
+        prior_baselines = [v for v in prior_baselines if isinstance(v, (float, int)) and v > 0]
+        if prior_baselines:
+            result["sampling"]["screen_baseline_reference"] = median(prior_baselines)
+        metric = plan.get("metric") or {}
+        whole = metric.get("source") == "wall" or any(
+            x in str(metric.get("name", "")).lower() for x in ("whole", "end-to-end", "total", "wall"))
+        result["attribution"] = dict(result.get("attribution") or {}) | {
+            "scope": "roi-wall" if whole else "roi-gpu-busy"}
     return {key: value for key, value in result.items() if value is not None}
 
 
@@ -189,9 +188,11 @@ def compact_candidate(row: dict) -> dict:
         return {key: value[key] for key in ["median", "mad", "min", "max"] if key in value}
 
     return {"id": row["id"], "description": row.get("description"),
+            **{k: row[k] for k in ("runs", "benchmark_executions", "profiled_executions", "measurement_role", "baseline_reused", "confidence") if k in row},
             "mechanism": row.get("mechanism"),
             "correctness": row["correctness"],
             "pairs": row["pairs"], "stop": row["stop"],
+            **({"ranking": row["ranking"]} if row.get("ranking") else {}),
             "metric": keep(row["metric"]),
             "baseline_metric": keep(row["baseline_metric"]),
             "improvement": row.get("improvement"),

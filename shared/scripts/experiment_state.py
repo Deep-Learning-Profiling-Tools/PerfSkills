@@ -127,7 +127,7 @@ def ensure_initialized(plan: dict, run: Path, variables: dict[str, str]) -> tupl
     if merged_request != request:
         write(request_path, merged_request)
     kernel_profile = plan.get("kernel_profile") or {}
-    if kernel_profile.get("enabled"):
+    if kernel_profile.get("enabled") and kernel_profile.get("baseline_acquisition") != "on-demand":
         baseline_ncu = run_kernel_profile(
             plan, run, "baseline", baseline, baseline_profile, "baseline", force=False)
         state.setdefault("kernel_profiles", {})["baseline"] = baseline_ncu
@@ -141,6 +141,18 @@ def ensure_initialized(plan: dict, run: Path, variables: dict[str, str]) -> tupl
             (raw / "brief-ncu-baseline.stderr.txt").write_text(brief_proc.stderr)
             if brief_proc.returncode:
                 raise RuntimeError(f"baseline NCU brief failed; see {display(raw)}")
+    if kernel_profile.get("baseline_acquisition") == "on-demand":
+        top = (load(baseline_profile, {}).get("hotspots") or [{}])[0]
+        state["baseline_activity"] = {"kernel": top.get("name"),
+            "hotspot_fraction": top.get("pct_of_wall", 0) / 100 if top.get("pct_of_wall") is not None else None,
+            "scope": load(baseline_profile, {}).get("scope"), "counter_evidence": None}
+        from compiler_evidence import collect
+        collect(plan, run, baseline, "baseline")
+        discovery = load(run / "baseline-acquisition.json", {})
+        key = (discovery.get("selected") or {}).get("cost_key")
+        if key and discovery.get("adapter_wall_s") is not None:
+            state.setdefault("acquisition_costs", {}).setdefault(key, [discovery["adapter_wall_s"]])
+        save_state(run, state)
     refresh_brief(plan, run, state)
     return state, baseline
 
@@ -168,10 +180,12 @@ def status(plan: dict, run: Path, variables: dict[str, str]) -> dict:
         return {"status": "initializing", "run_id": plan["run_id"],
                 "stage": stage, "profile": display(baseline_profile)}
     measured = sum(1 for item in state["candidates"].values() if item.get("result"))
-    return {"status": "verified" if state.get("confirmed") else "ready",
+    return {"status": "verified" if state.get("confirmed") else "measured" if state.get("selected") else "ready",
             "run_id": plan["run_id"],
             "candidates": len(state["candidates"]), "batches": len(state["batches"]),
             "measured": measured, "budget": (plan.get("budget") or {}).get("iterations"),
             "confirmed": state.get("confirmed"),
+            **({"selected": state["selected"], "statistical_significance": "not-established",
+                "campaign_complete": True} if state.get("selected") else {}),
             "best": ({key: state["best"][key] for key in ["id", "improvement"]}
                      if state.get("best") else None)}

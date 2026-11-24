@@ -19,6 +19,20 @@
           "hotspot": {"type": "string"},
           "wall_pct": {"type": ["number", "null"]},
           "symbol": {"type": ["string", "null"]},
+          "additional_hotspots": {
+            "description": "Other measured kernels that resolve to the same source slice.",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["hotspot", "wall_pct", "symbol", "match_line"],
+              "properties": {
+                "hotspot": {"type": "string"},
+                "wall_pct": {"type": ["number", "null"]},
+                "symbol": {"type": ["string", "null"]},
+                "match_line": {"type": "integer", "minimum": 1}
+              }
+            }
+          },
           "dependency": {
             "type": "object",
             "required": ["relation", "parent"],

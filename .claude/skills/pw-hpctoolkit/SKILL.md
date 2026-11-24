@@ -6,6 +6,14 @@ allowed-tools: Read, Edit, Bash, Grep, Glob
 
 # pw-hpctoolkit — HPCToolkit GPU profiling
 
+## Adaptive ProfileWeaver collection
+
+The root controller has a native evidence adapter (`shared/scripts/native_profiler.py`), separate
+from the standalone workflow below. It profiles the validated existing executable without a
+rebuild or source edits, probes CUDA/PC support, and emits bounded calling-context evidence.
+See [native providers](../profile-weaver/references/native-providers.md). GPU operation sums are
+not GPU busy union; achieved occupancy and cache behavior are not inferred from context metrics.
+
 Wrapper around the vendored **[hpctoolkit-agent-skill](../../../external/hpctoolkit-agent-skill/)**
 (`external/hpctoolkit-agent-skill/`), which owns the collection workflow. This skill adds the
 ProfileWeaver-facing contract.

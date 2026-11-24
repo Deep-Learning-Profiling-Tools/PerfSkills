@@ -144,6 +144,8 @@ DELTA_METRICS = [
 def ncu_delta(baseline: dict | None, variant: dict | None) -> list[dict]:
     if not baseline or not variant:
         return []
+    if baseline.get("kernel") and variant.get("kernel") and baseline["kernel"] != variant["kernel"]:
+        return []
     changes = []
     for name, path in DELTA_METRICS:
         before, after = nested(baseline, *path), nested(variant, *path)

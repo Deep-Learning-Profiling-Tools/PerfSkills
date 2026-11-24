@@ -2,59 +2,151 @@
   "version": 1,
   "skills": [
     {
+      "skill": "pw-cupti",
+      "tool": "CUPTI concurrent activity",
+      "answers": [
+        "gpu-hotspot",
+        "transfer",
+        "gpu-pc",
+        "instruction-stalls",
+        "roi-attribution"
+      ],
+      "cost_rank": 1.5,
+      "availability": {
+        "commands_all": [
+          "nvcc",
+          "g++"
+        ]
+      },
+      "full_loop": false
+    },
+    {
       "skill": "pw-perf",
       "tool": "Linux perf",
-      "answers": ["hotspot", "serial-fraction", "compute-bound", "memory-bandwidth", "cache", "vectorization"],
+      "answers": [
+        "hotspot",
+        "serial-fraction",
+        "compute-bound",
+        "memory-bandwidth",
+        "cache",
+        "vectorization"
+      ],
       "cost_rank": 1,
-      "availability": {"commands_all": ["perf"]},
+      "availability": {
+        "commands_all": [
+          "perf"
+        ]
+      },
       "full_loop": true
     },
     {
       "skill": "pw-nsight-systems",
       "tool": "NVIDIA Nsight Systems",
-      "answers": ["gpu-idle", "transfer", "launch-overhead", "sync", "gpu-hotspot", "hotspot"],
+      "answers": [
+        "gpu-idle",
+        "transfer",
+        "launch-overhead",
+        "sync",
+        "gpu-hotspot",
+        "hotspot",
+        "roi-attribution"
+      ],
       "cost_rank": 2,
-      "availability": {"commands_all": ["nsys"]},
+      "availability": {
+        "commands_all": [
+          "nsys"
+        ]
+      },
       "full_loop": true
     },
     {
       "skill": "pw-nsight-compute",
       "tool": "NVIDIA Nsight Compute",
-      "answers": ["gpu-occupancy", "compute-bound", "memory-bandwidth", "memory-latency", "cache", "instruction-stalls", "register-pressure", "warp-divergence", "gpu-roofline"],
+      "answers": [
+        "gpu-occupancy",
+        "compute-bound",
+        "memory-bandwidth",
+        "memory-latency",
+        "cache",
+        "instruction-stalls",
+        "register-pressure",
+        "warp-divergence",
+        "gpu-roofline"
+      ],
       "cost_rank": 4,
-      "availability": {"commands_all": ["ncu"]},
+      "availability": {
+        "commands_all": [
+          "ncu"
+        ]
+      },
       "full_loop": true
     },
     {
       "skill": "pw-hpctoolkit",
       "tool": "HPCToolkit",
-      "answers": ["gpu-hotspot", "transfer", "gpu-idle", "sync", "gpu-source-line", "call-context"],
+      "answers": [
+        "gpu-hotspot",
+        "transfer",
+        "sync",
+        "gpu-source-line",
+        "call-context",
+        "instruction-stalls",
+        "memory-latency"
+      ],
       "cost_rank": 3,
-      "availability": {"commands_all": ["hpcrun", "hpcstruct", "hpcprof"]},
+      "availability": {
+        "commands_all": [
+          "hpcrun",
+          "hpcstruct",
+          "hpcprof"
+        ]
+      },
       "full_loop": false
     },
     {
       "skill": "pw-gpa",
       "tool": "GPU Performance Advisor",
-      "answers": ["gpu-occupancy", "memory-latency", "sync", "vectorization", "gpu-source-line", "instruction-stalls"],
+      "answers": [
+        "memory-latency",
+        "gpu-source-line",
+        "instruction-stalls",
+        "causal-stall-attribution",
+        "gpu-sync-stalls"
+      ],
       "cost_rank": 5,
-      "availability": {"env_all": ["PW_GPA_ROOT", "PW_GPA_TOOLCHAIN"]},
+      "availability": {
+        "env_any": [
+          "PW_GPA_ROOT",
+          "PW_GPA_TOOLCHAIN"
+        ]
+      },
       "full_loop": true
     },
     {
       "skill": "pw-drgpum",
       "tool": "DrGPUM memory_liveness",
-      "answers": ["allocation", "gpu-memory-capacity"],
+      "answers": [
+        "allocation",
+        "gpu-memory-capacity"
+      ],
       "cost_rank": 1,
-      "availability": {"artifact": "drgpum"},
+      "availability": {
+        "artifact": "drgpum"
+      },
       "full_loop": true
     },
     {
       "skill": "pw-gvprof",
       "tool": "GVProf",
-      "answers": ["value-redundancy", "memory-bandwidth", "cache"],
+      "answers": [
+        "value-redundancy",
+        "memory-bandwidth",
+        "cache"
+      ],
       "cost_rank": 1,
-      "availability": {"artifact": "gvprof"},
+      "availability": {
+        "artifact": "gvprof"
+      },
       "full_loop": false
     }
   ]

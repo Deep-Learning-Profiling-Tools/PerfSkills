@@ -74,12 +74,30 @@ Start at `.claude/skills/profile-weaver/SKILL.md`. `README.md` has the full pict
 
 Optimize from measured evidence with minimal agent context.
 
+New journeys default to bounded adaptive acquisition: one unprofiled candidate execution,
+at most two when needed, no automatic warmup, static CUDA resources and question-driven profiles.
+Baseline correctness supplies the reusable timing reference. Final selection reuses measurements;
+no automatic final benchmark campaign is permitted. One/two samples give a measured result,
+not established statistical significance; confidence intervals remain null. `start --policy legacy` and existing plans
+retain the earlier behavior. `check ID [--build-only]` may checkpoint up to two linked unmeasured
+candidates; it never establishes a speedup. See the root skill for evidence requests.
+Choose profilers from the missing capability first, then observed/configured cost and time.
+Do not reduce ProfileWeaver to a fixed NSYS/NCU loop or equate fewer captures with better guidance.
+Return compact, actionable evidence and explicit unknowns; preserve full detail in artifacts.
+Treat coarse or unstable screens as provisional; printed precision is not timer accuracy.
+Do not start a repeated finalist comparison to resolve close rankings under the bounded policy.
+Candidate counters and slices must name the measured snapshot; never copy older timeline
+times onto current kernels. A successful capable provider refreshes the evidence anchor.
+Adaptive evaluations return bounded evidence inline. Use named evidence groups for missing
+details; HPCToolkit/GPA require positive capability probes and cannot substitute coarse timing
+for instruction evidence. Recent mechanism captures are reused across a short plateau.
+
 1. Invoke `python3 shared/scripts/experiment.py start --workload <directory>`; an optional
    `profileweaver.json` supplies non-default build, command, oracle, metric, or profiling facts.
    When it is absent, the backend derives a conservative contract from standard build files and
    the executable. Never hand-author or edit run JSON.
 2. Invoke only `shared/scripts/experiment.py`; `start` routes profilers, runs cached preflight,
-   builds and validates the baseline, captures NSYS and NCU, and records the decision. Never infer
+   builds and validates the baseline, chooses capable baseline evidence, and records the decision. New adaptive baselines can use CUPTI NVTX activity and defer counters. Never infer
    a mechanism a selected profiler cannot observe; unknown values remain `null`.
 3. Read only compact profile briefs, per-iteration delta capsules, and their named source slices.
    Edit only returned candidate source workspaces. Never read framework Python, schemas, plans,
@@ -93,8 +111,9 @@ Optimize from measured evidence with minimal agent context.
    unprofiled metric, preferably CUDA-event or application ROI time for a kernel objective, and
    retain whole-process time as a collateral check. Re-run the full timing profile only when an
    attribution or collateral-cost gate remains unresolved.
-5. For NVIDIA kernel-internal questions, use baseline NSYS to name and time one hotspot, then
-   baseline NCU full evidence. Every correct candidate in standard mode returns an NCU capture/reuse
+5. For NVIDIA kernel-internal questions, first name and time a hotspot with a capable timing provider.
+   In new adaptive runs, request counters only when a missing internal observable warrants them;
+   saved/legacy workflows retain baseline NSYS and NCU full evidence. Every correct candidate in standard mode returns an NCU capture/reuse
    disposition and parent- plus baseline-relative deltas. A workload using
    `sampling.mode=winner-confirmation` returns timing deltas during screening and defers candidate
    replay until the best candidate is selected; its final winner campaign restores the full NCU
@@ -120,8 +139,9 @@ Optimize from measured evidence with minimal agent context.
 8. For long commands, wait on the existing session at the longest practical interval. Do not
    combine waits with `tail`, `ps`, JSON readers, or raw-log reads. Prefer non-login `/bin/sh`;
    establish any required module environment once in cached preflight.
-9. Accept only a correct, significant absolute improvement under the same fingerprint whose
-   candidate profile shows the targeted cost fell and collateral cost did not erase the gain. An
-   unresolved gate is `inconclusive`, never a speedup.
+9. A fully verified rewrite requires correct, significant improvement under the same fingerprint
+   with attribution and collateral evidence. The bounded one/two-execution policy can report the
+   observed ratio and preserve the measured leader, but statistical verification remains
+   `inconclusive`; never fabricate confidence or add runs to force a significant verdict.
 10. Keep detailed application/profiler output under `raw/`. Return one compact verdict and artifact
    paths. Record cost with `shared/scripts/tokens.py`.

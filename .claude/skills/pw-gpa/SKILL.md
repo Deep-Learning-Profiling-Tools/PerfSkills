@@ -6,6 +6,15 @@ allowed-tools: Read, Edit, Bash, Grep, Glob
 
 # pw-gpa — GPA (GPU Performance Advisor)
 
+## Adaptive ProfileWeaver collection
+
+The root controller can invoke GPA as an evidence provider through
+`shared/scripts/native_profiler.py`. This path profiles the already built executable and
+does not require corpus registration or run the standalone optimization loop below. It requires
+advertised PC support, GPA-enabled `hpcprof`, and a configured compatible GPU architecture model.
+Literal stall tokens and blamed source lines are returned; advisor predictions never rank
+candidates. See [native providers](../profile-weaver/references/native-providers.md).
+
 Wrapper around the vendored **[gpa-agent-skill](../../../external/gpa-agent-skill/)**
 (`external/gpa-agent-skill/`), which owns the nine-step optimization loop, the ledger, and the
 cross-benchmark prior. This skill adds the ProfileWeaver-facing contract: setup, gate mapping,
